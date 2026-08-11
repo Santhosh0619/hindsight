@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+RED='\033[0;31m'; GREEN='\033[0;32m'; NC='\033[0m'
+
+BRANCH=$(git branch --show-current)
+echo "── pre-push [$BRANCH] ───────────────────────────────"
+
+# 1. Block direct push to main
+if [[ "$BRANCH" == "main" ]]; then
+  echo -e "${RED}BLOCKED: Direct push to main not allowed.${NC}"
+  echo "Create a feature branch, push it, and open a PR."
+  exit 1
+fi
+
+# 2. Author guard
+AUTHOR_NAME=$(git config user.name 2>/dev/null || echo "")
+if echo "$AUTHOR_NAME" | grep -qiE "(claude|anthropic|assistant)"; then
+  echo -e "${RED}BLOCKED: AI name in git user.name: $AUTHOR_NAME${NC}"
+  exit 1
+fi
+echo -e "${GREEN}✓ Branch: $BRANCH | Author: $AUTHOR_NAME${NC}"
+
+# 3. Backend checks
+if [[ -d "backend" ]]; then
+  echo ""
+  echo "Backend checks..."
+  cd backend
+
+  python -m ruff check . --quiet || { echo -e "${RED}BLOCKED: ruff errors${NC}"; exit 1; }
+  echo -e "${GREEN}  ✓ ruff${NC}"
+
+  python -m mypy app --strict --no-error-summary 2>&1 | tail -3
+  python -m mypy app --strict --quiet || { echo -e "${RED}BLOCKED: mypy errors${NC}"; exit 1; }
+  echo -e "${GREEN}  ✓ mypy${NC}"
+
+  python -m pytest tests/ -q --tb=line --no-header || { echo -e "${RED}BLOCKED: pytest failures${NC}"; exit 1; }
+  echo -e "${GREEN}  ✓ pytest${NC}"
+
+  cd ..
+fi
+
+# 4. Frontend checks
+if [[ -d "frontend" && -f "frontend/package.json" ]]; then
+  echo ""
+  echo "Frontend checks..."
+  cd frontend
+
+  npx tsc --noEmit --pretty false 2>&1 | head -20
+  npx tsc --noEmit --quiet || { echo -e "${RED}BLOCKED: TypeScript errors${NC}"; exit 1; }
+  echo -e "${GREEN}  ✓ tsc${NC}"
+
+  npm run build --silent || { echo -e "${RED}BLOCKED: build failed${NC}"; exit 1; }
+  echo -e "${GREEN}  ✓ build${NC}"
+
+  cd ..
+fi
+
+echo ""
+echo "── pre-push passed ──────────────────────────────────"
+exit 0
