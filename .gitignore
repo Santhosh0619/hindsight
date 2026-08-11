@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.egg
+
+# Environment — NEVER commit
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Database / local data
+*.db
+*.sqlite3
+chroma_data/
+data/
+pgdata/
+
+# ML models (large — not committed)
+models/
+*.bin
+*.safetensors
+*.onnx
+
+# Node
+node_modules/
+.pnp
+.pnp.js
+frontend/dist/
+frontend/.vite/
+e2e/node_modules/
+e2e/test-results/
+e2e/playwright-report/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+junit*.xml
+
+# Docker
+*.log
+logs/
+
+# Claude Code internals
+.claude/cache/
+.claude/tmp/
+.claude/sessions/
+
+# Local orchestration/control files — not part of the public repo
+/Master-Prompt.md
+/plan.md
+/setup.md
