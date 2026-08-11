@@ -2,9 +2,11 @@
 
 ## Branch naming
 ```
-<type>/phase-<N>-<short-slug>
+<type>/<short-feature-slug>
 ```
-Examples: feat/phase-1-foundation, feat/phase-4-catalog-graph, fix/phase-8-retry-loop
+Name the branch after the feature/module being built, not the phase number — phase
+numbers shift as scope changes, feature names don't.
+Examples: feat/foundation, feat/auth-workspaces, feat/catalog-graph, fix/retry-loop
 
 ## Create (Step 1)
 ```bash
