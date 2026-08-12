@@ -93,3 +93,22 @@ rejected: pin/upgrade the host's native Python toolchain to match the container 
 — rejected as an ongoing maintenance burden (two toolchains to keep in sync instead of
 one) for a project whose entire backend already assumes a Docker dev environment
 (`docker-compose.yml`, `Makefile`'s `shell-api`/`shell-db` targets).
+
+## 6. CI's frontend and e2e jobs skip gracefully until their modules exist
+
+**Context.** `.github/workflows/ci.yml`'s `frontend` job unconditionally runs `npm ci`
+against `frontend/package.json`, and `e2e` unconditionally builds the frontend and
+starts `docker-compose.test.yml` (which itself needs `app.seed.seed`). None of those
+exist until Phase 3/11. Left as-is, every PR before those phases land would show a red
+CI badge for reasons that have nothing to do with the PR's actual changes — the same
+"module doesn't exist yet" problem `pre-push` already hit for backend checks before
+`backend/pyproject.toml` existed (commit `8a120bf`).
+
+**Decision.** Both jobs now start with a guard step that checks for the files the rest
+of the job needs (`frontend/package.json`; additionally `backend/app/seed/seed.py` for
+`e2e`) and sets a step output; every subsequent step is gated on that output. A job with
+all its real steps skipped reports success (not failure), so `needs: [backend,
+frontend]` on the `e2e` job still resolves correctly once those phases land. Alternative
+rejected: give the frontend/e2e jobs `continue-on-error: true` — rejected because that
+would mask a *real* failure once the frontend exists as a soft warning instead of a hard
+CI failure, defeating the whole point of the check.
