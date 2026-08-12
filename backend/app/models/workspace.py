@@ -23,6 +23,9 @@ class Workspace(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     slug: Mapped[str] = mapped_column(String(200), unique=True, nullable=False, index=True)
     is_demo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    invite_code: Mapped[str | None] = mapped_column(
+        String(20), unique=True, nullable=True, index=True
+    )
 
 
 class WorkspaceMember(Base):

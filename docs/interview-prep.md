@@ -98,3 +98,76 @@ the deviation is recorded (ADR 0001) and the verification gate that actually fit
 phase — integration tests against the real ASGI app, both health-check branches — is
 what runs instead. Playwright resumes the moment there's a user journey to drive through
 a browser.
+
+---
+
+## Phase 2 — Auth & Workspaces
+
+**Q: Access and refresh tokens — where are they stored, why, and what's your
+revocation story?** (plan.md §17 Q11)
+
+A: The access token is a stateless JWT returned in the response body and never
+cookied — the frontend (Phase 3) keeps it in memory. It's self-verifying (HS256,
+15-minute default TTL), so most requests need zero DB round-trips to authenticate.
+The refresh token is the opposite on purpose: an opaque random value
+(`secrets.token_urlsafe(48)`) in an httpOnly, Secure, SameSite=Lax cookie scoped to
+`/api/v1/auth`, with only its SHA-256 hash ever persisted (`refresh_tokens.token_hash`).
+It has to be stateful, because revocation only works if there's a database row to
+revoke — a JWT refresh token would be just as fast to check but couldn't be revoked
+before its own expiry without a separate blocklist, which is the same DB dependency
+with extra steps. Revocation itself is rotation-based: every refresh call revokes the
+token it was given and issues a new one, so a token is single-use. If a *revoked* token
+is ever presented again, that's a replay signal — the handler revokes every other live
+token for that user, not just the one presented, logging the caller out everywhere
+rather than leaving a reuse window open.
+
+**Q: Why do login and refresh return the exact same error message for every failure
+case?**
+
+A: Because the alternative leaks information. If "no such user" and "wrong password"
+returned different messages, an attacker could enumerate valid emails by watching which
+error comes back. `auth_service.login` has a single `UnauthorizedError` raise site
+covering "no such user," "wrong password," and "inactive account" — there's no code
+path that could accidentally diverge the two, because there's only one path. Same
+principle behind `get_current_workspace` returning 404 instead of 403 for a non-member:
+a 403 confirms the resource exists; 404 doesn't.
+
+**Q: A workspace must always have at least one owner — where is that enforced, and
+what happens if you try to violate it?**
+
+A: `workspace_service._count_owners` is checked in both `change_member_role` (demoting
+the last owner) and `remove_member` (removing the last owner) before the mutation
+happens, raising `ConflictError` (409) if the count would hit zero. It's checked in the
+service layer, not the database — there's no CHECK constraint enforcing "at least one
+owner per workspace" at the schema level, because that invariant spans multiple rows
+(count members WHERE role='owner') in a way a single-row constraint can't express
+cheaply. The tradeoff is honest: this is an application-level invariant, not a
+database-level one, so it only holds as long as every write path goes through
+`workspace_service`. Nothing in this phase's scope writes `workspace_members` any other
+way.
+
+**Q: Why does the demo-guest endpoint rate limit in memory instead of using Redis or a
+DB table?**
+
+A: The project has one intentional data store — Postgres — and no Redis (plan.md §7's
+graph-database reasoning applies here too: don't add infrastructure until there's a
+concrete number that justifies it). An in-memory token bucket keyed by IP is enough to
+stop casual abuse of a single-process dev/demo deployment. Its known limitation is
+explicit, not hidden: under N replicas the effective limit multiplies by N, since each
+process has its own bucket. That's an acceptable, documented tradeoff at this project's
+traffic — Phase 14's dedicated rate-limiting pass is where it'd be revisited if it ever
+needed to hold under real concurrent load.
+
+**Q: What's a bug in this phase that unit tests and type checking didn't catch, and how
+did you find it?**
+
+A: The refresh cookie's `Path` was set to `/auth` — correct for the router's own
+`APIRouter(prefix="/auth")` in isolation, but wrong once `app.main` mounts it under
+`/api/v1`, making the real path `/api/v1/auth/refresh`. A cookie's `Path` is a prefix
+match against the actual request URL, not the router's declared prefix, so the browser
+(and `httpx`'s test client, which enforces the same cookie semantics) never sent it
+back. `ruff` and `mypy` have no way to know what path a route ends up mounted at, and a
+unit test that mocks the HTTP layer wouldn't exercise real cookie-path matching either
+— this only surfaced from an actual `curl` walkthrough of the running endpoint. The
+lesson generalized into this phase's workflow: cookie/session code gets a live
+request-response walkthrough, not just green checks, before being called done.
