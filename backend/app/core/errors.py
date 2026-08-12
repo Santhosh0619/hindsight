@@ -44,6 +44,11 @@ class ValidationAppError(AppError):
     code = "validation_error"
 
 
+class RateLimitedError(AppError):
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    code = "rate_limited"
+
+
 class LLMUnavailableError(AppError):
     """Raised when every configured LLM provider is unreachable or out of quota.
 

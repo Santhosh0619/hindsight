@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     jwt_secret: str
     access_token_ttl_minutes: int = 15
     refresh_token_ttl_days: int = 14
+    # False only for local HTTP dev — a browser silently drops a Secure cookie sent
+    # over plain http://, which would break the refresh flow entirely on localhost.
+    # Must be true (the default) anywhere reachable over the network.
+    cookie_secure: bool = True
 
     # LLM — all optional, the app must fully function without any key
     llm_provider: str = "gemini"
