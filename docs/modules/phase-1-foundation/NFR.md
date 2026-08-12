@@ -55,17 +55,23 @@
 
 ## Testability
 
-- Backend: `app/core/security.py`'s functions (`hash_password`/`verify_password`,
-  `generate_refresh_token`/`hash_refresh_token`, `create_access_token`/
-  `decode_access_token`) and `app/core/pagination.py`'s cursor encode/decode are
-  pure and unit-testable with no DB. `app/core/deps.py`'s dependencies need an
-  integration test against a real (or test-container) Postgres, since they query
-  `User`/`WorkspaceMember` directly. No test files exist yet for this phase — the
-  Phase 1 checkpoint in Master-Prompt.md doesn't require them, but Phase 2 (auth)
-  should add coverage for both this module's primitives and its own routes.
+- Backend: `backend/tests/test_security.py` and `test_pagination.py` unit-test
+  `app/core/security.py`'s functions (hash/verify, refresh-token generation/hashing,
+  access-token roundtrip and expiry) and `app/core/pagination.py`'s cursor
+  encode/decode — all pure, no DB needed. `backend/tests/test_health.py`
+  integration-tests `GET /health` end-to-end through the real ASGI app via
+  `httpx.ASGITransport`, covering both the DB-reachable and DB-unreachable
+  branches (the latter by monkeypatching the engine). `app/core/deps.py`'s
+  dependencies (`get_current_user`/`get_current_workspace`/`require_role`) aren't
+  unit tested yet since they need a real `User`/`WorkspaceMember` row to query —
+  Phase 2 (auth) adds that coverage alongside its own routes, once those rows can
+  actually be created through the API.
 - Frontend: none — no frontend code exists yet (Phase 3).
-- E2E: none — no user-facing journey exists yet; `GET /health` was verified
-  manually via `curl` against the running `api` container.
+- E2E: deferred — no user-facing journey exists yet, and the isolated Playwright
+  stack (`docker-compose.test.yml`) depends on `app.seed.seed` (Phase 11) and
+  `frontend/package.json` (Phase 3), neither of which exist. `GET /health` was
+  verified both manually via `curl` and by `test_health.py`; see
+  `docs/decisions/0001-phase-1-foundation.md` §4 for the full reasoning.
 
 ## Constraints
 
