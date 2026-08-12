@@ -112,3 +112,21 @@ frontend]` on the `e2e` job still resolves correctly once those phases land. Alt
 rejected: give the frontend/e2e jobs `continue-on-error: true` — rejected because that
 would mask a *real* failure once the frontend exists as a soft warning instead of a hard
 CI failure, defeating the whole point of the check.
+
+## 7. CI's AI-attribution content scan exempts the files that document the ban
+
+**Context.** `author-check`'s file-content step greps every changed file for literal
+strings like `claude-code` to catch AI attribution. `.github/workflows/ci.yml` contains
+that exact string *as the pattern being searched for*, so editing the workflow file (as
+this phase's `pre-push`/CI fixes did) makes the job flag itself — a false positive. The
+same is true of `CLAUDE.md`, `setup.md`, and `.claude/skills/git-safety.md`, which all
+document the same banned strings for the same reason. `.claude/hooks/pre-commit` already
+carries an identical exemption list for its own staged-diff scan (from an earlier
+commit), confirming this is an established, deliberate pattern in this project rather
+than a one-off workaround.
+
+**Decision.** Added the same class of exemption to CI's content-scan step: skip
+`CLAUDE.md`, `setup.md`, `.github/workflows/ci.yml`, and everything under `.claude/`
+before grepping. A real attribution string would never legitimately land in any other
+file, so the exemption doesn't weaken the check's actual purpose — it only stops the
+policy documentation from tripping over itself.
