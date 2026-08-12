@@ -130,3 +130,52 @@ than a one-off workaround.
 before grepping. A real attribution string would never legitimately land in any other
 file, so the exemption doesn't weaken the check's actual purpose — it only stops the
 policy documentation from tripping over itself.
+
+## 8. The initial migration must be self-sufficient — it can't rely on app startup
+
+**Context.** `app/db/init.py`'s `ensure_vector_extension` runs from `app/main.py`'s
+`lifespan`, so on this machine `db` and `api` were always brought up together before
+`alembic upgrade head` was run by hand — the `vector` Postgres extension was already
+created by the time migrations ran, masking a real gap. CI's `backend` and `migrations`
+jobs run `alembic upgrade head` directly against a bare `pgvector/pgvector:pg16` service
+container; the app process never starts, so the extension was never created, and the
+very first `VECTOR`-typed column (`semantic_cache.embedding`) failed with `type "vector"
+does not exist`. Phase 18 (deploy) has the identical shape — migrations run against
+production before/without necessarily booting the app first.
+
+**Decision.** Added `op.execute("CREATE EXTENSION IF NOT EXISTS vector")` as the first
+statement in the initial migration's `upgrade()`, so `alembic upgrade head` alone is
+sufficient regardless of whether anything has ever run the app's lifespan. The app's own
+`ensure_vector_extension` stays as defense-in-depth (idempotent, harmless to call twice)
+for the case where a database is provisioned without going through migrations first.
+This migration was amended in place rather than fixed forward with a new revision —
+CLAUDE.md's "never edit a committed migration" protects against rewriting history under
+databases that already applied it; this one had only ever run against ephemeral
+dev/CI databases on an unmerged branch, so no such database exists to protect against.
+
+Testing this required actually reproducing the standalone condition: `docker compose
+down -v` to drop the local Postgres volume, then `docker compose run --rm api alembic
+upgrade head` — `run` executes a one-off container from the `api` image without ever
+starting `uvicorn`/the lifespan hook, exactly like CI's bare `alembic upgrade head`.
+Re-running the fix under those conditions (not the normal `db`+`api` dev flow, which
+would have masked it again) confirmed it.
+
+## 9. `downgrade()` must drop the enum types `drop_table` leaves behind
+
+**Context.** Testing decision 8's fix under the same standalone conditions
+(`docker compose run --rm api alembic upgrade head && alembic downgrade base && alembic
+upgrade head`) surfaced a second bug: autogenerate's `downgrade()` calls `op.drop_table`
+for every table but never drops the native Postgres `ENUM` types those tables' `sa.Enum`
+columns created. Re-running `upgrade()` after a `downgrade()` then fails with
+`DuplicateObjectError: type "incident_status" already exists`, because the type survived
+the downgrade and the next upgrade tries to `CREATE TYPE` it again. This is exactly what
+CI's "Migration up → down → up" job exists to catch — it caught it.
+
+**Decision.** Appended `op.execute(f"DROP TYPE IF EXISTS {enum_name}")` for all twelve
+named enums (`brief_status`, `edge_criticality`, `edge_kind`, `fact_type`,
+`feedback_verdict`, `incident_status`, `job_status`, `postmortem_status`,
+`service_link_role`, `service_tier`, `severity`, `workspace_role`) at the end of
+`downgrade()`, after every table that references them is already dropped — type drops
+must come last since Postgres refuses to drop a type still referenced by a column.
+Verified with the same standalone `up → down → up → alembic check` cycle: reversible,
+zero drift, all 27 tables and the `vector` extension present after the final upgrade.
