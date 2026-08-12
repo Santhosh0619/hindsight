@@ -7,7 +7,9 @@
 - Request: `SignupRequest{email: EmailStr, password: str (min 8), full_name: str (1-200)}`
 - Response `201`: `AuthResponse{access_token: str, token_type: "bearer", user: UserOut}`
   (`UserOut{id, email, full_name, is_demo}`); refresh token set via `Set-Cookie`
-  (httpOnly, Secure, SameSite=Lax, path=`/auth`, max-age = `refresh_token_ttl_days`).
+  (httpOnly, Secure, SameSite=Lax, path=`/api/v1/auth` — matches where `app.main`
+  actually mounts this router, not just the router's own prefix, see ADR 0002 §4 —
+  max-age = `refresh_token_ttl_days`).
 - Errors: `409 conflict` (email already registered), `422 validation_error` (weak
   password / malformed email — Pydantic-level).
 

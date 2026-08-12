@@ -1,3 +1,5 @@
+import uuid
+
 from httpx import AsyncClient
 
 from app.services.rate_limit import TokenBucket
@@ -92,11 +94,17 @@ async def test_refresh_reuse_revokes_the_whole_family(client: AsyncClient) -> No
     client.cookies.set("refresh_token", first_cookie, path="/api/v1/auth")
     reuse_response = await client.post("/api/v1/auth/refresh")
     assert reuse_response.status_code == 401
-    assert "already been used" in reuse_response.json()["error"]["message"]
 
+    # The whole family was revoked as a side effect of the reuse above — not just the
+    # reused token itself but the second (until-now-valid) token too.
     client.cookies.set("refresh_token", second_cookie, path="/api/v1/auth")
     also_revoked_response = await client.post("/api/v1/auth/refresh")
     assert also_revoked_response.status_code == 401
+
+    # Reuse must not be distinguishable from any other refresh failure by message —
+    # otherwise the error text itself becomes the "this token was reused" tell the
+    # NFR forbids.
+    assert reuse_response.json() == also_revoked_response.json()
 
 
 async def test_refresh_without_cookie_is_unauthorized(client: AsyncClient) -> None:
@@ -133,6 +141,19 @@ async def test_demo_guest_gets_a_working_session_with_no_prior_signup(
     me = await client.get("/api/v1/auth/me", headers=auth_headers(body["access_token"]))
     assert me.status_code == 200
     assert me.json()["memberships"][0]["role"] == "viewer"
+
+
+async def test_demo_endpoint_rate_limits_by_ip(client: AsyncClient) -> None:
+    # A distinct X-Forwarded-For gives this test its own bucket key, isolated from
+    # every other test that also calls /auth/demo against the shared module-level
+    # rate limiter.
+    headers = {"X-Forwarded-For": f"203.0.113.{uuid.uuid4().int % 250}"}
+
+    responses = [await client.post("/api/v1/auth/demo", headers=headers) for _ in range(6)]
+
+    assert [r.status_code for r in responses[:5]] == [200] * 5
+    assert responses[5].status_code == 429
+    assert responses[5].json()["error"]["code"] == "rate_limited"
 
 
 def test_token_bucket_blocks_after_capacity_is_exhausted() -> None:
