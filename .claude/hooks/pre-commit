@@ -35,6 +35,8 @@ ATTRIBUTION_SCAN_EXCLUDES=( \
   ':!.claude/skills/git-safety.md' \
   ':!.github/workflows/ci.yml' \
   ':!CLAUDE.md' \
+  ':!setup.md' \
+  ':!docs/decisions/0001-phase-1-foundation.md' \
 )
 STAGED=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || echo "")
 FOUND=0

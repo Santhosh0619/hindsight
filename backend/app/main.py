@@ -1,0 +1,66 @@
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+
+from app.core.config import get_settings
+from app.core.errors import AppError, app_error_handler
+from app.core.logging import RequestIDMiddleware, configure_logging, get_logger
+from app.db.init import ensure_vector_extension
+from app.db.session import dispose_engine, get_engine
+
+__version__ = "0.1.0"
+
+logger = get_logger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    configure_logging()
+    engine = get_engine()
+    await ensure_vector_extension(engine)
+    logger.info("app_startup", llm_configured=get_settings().llm_configured)
+    yield
+    await dispose_engine()
+    logger.info("app_shutdown")
+
+
+def create_app() -> FastAPI:
+    settings = get_settings()
+
+    app = FastAPI(title="Hindsight API", version=__version__, lifespan=lifespan)
+
+    app.add_middleware(RequestIDMiddleware)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    app.add_exception_handler(AppError, app_error_handler)
+
+    @app.get("/health")
+    async def health() -> dict[str, object]:
+        db_connected = True
+        try:
+            engine = get_engine()
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+        except Exception:  # noqa: BLE001 — health check must never raise, only report
+            db_connected = False
+
+        return {
+            "status": "ok" if db_connected else "degraded",
+            "version": __version__,
+            "db_connected": db_connected,
+            "llm_configured": settings.llm_configured,
+        }
+
+    return app
+
+
+app = create_app()
