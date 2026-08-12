@@ -22,8 +22,10 @@ chroma_data/
 data/
 pgdata/
 
-# ML models (large — not committed)
-models/
+# ML models (large — not committed). Runtime model cache lives in the
+# `model-cache` Docker volume (see docker-compose.yml), not a repo path, so this
+# is scoped by extension only — a bare `models/` would also match
+# backend/app/models/, which is source code.
 *.bin
 *.safetensors
 *.onnx

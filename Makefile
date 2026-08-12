@@ -1,5 +1,5 @@
 .PHONY: dev down migrate revision seed test test-be test-fe test-e2e lint typecheck \
-        build logs shell-api shell-db hooks
+        build logs shell-api shell-db hooks eval
 
 # ── Dev environment ───────────────────────────────────────────────────────────
 dev:
@@ -26,6 +26,12 @@ revision:
 
 seed:
 	docker compose exec api python -m app.seed.seed
+
+# ── Evaluation ────────────────────────────────────────────────────────────────
+# Real implementation lands in Phase 12 (app.services.evaluation.cli); until then this
+# target exists so `make eval` fails with a clear message instead of "no rule to make".
+eval:
+	docker compose exec api python -m app.services.evaluation.cli --mode $(or $(MODE),full)
 
 # ── Testing ───────────────────────────────────────────────────────────────────
 test: test-be test-fe test-e2e
