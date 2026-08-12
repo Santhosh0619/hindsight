@@ -11,7 +11,7 @@ Legend: `done` · `in-progress` · `blocked` · `pending`
   pgvector HNSW availability all verified against installed versions.
 - Recorded in `docs/decisions/0000-dependency-verification.md`.
 
-## Phase 1 — Foundation — done, PR open
+## Phase 1 — Foundation — done, merged ([PR #2](https://github.com/Santhosh0619/hindsight/pull/2))
 
 Target checkpoint (Master-Prompt.md): `make dev` starts all three containers,
 `make migrate` applies cleanly, `GET /health` returns 200 with
@@ -158,7 +158,70 @@ space (down to 83% / 34GB free) and all prior containers for the project were
 removed as part of that cleanup; Docker Desktop was restarted and `db`+`api`
 were rebuilt and recreated from scratch successfully.
 
-## Phase 2 — Auth & Workspaces — pending
+## Phase 2 — Auth & Workspaces — done, PR open
+
+Target checkpoint (Master-Prompt.md): full auth flow works via curl; cross-tenant test
+passes.
+
+Verified: signup → login → `/auth/me` → refresh (rotates cookie) → logout, all live
+against the running `db`+`api` containers. Refresh-token reuse revokes the whole token
+family. Cross-tenant 404, RBAC 403 (responder blocked from owner-only endpoints),
+invite-code issue/join, last-owner protection (409 on demote/remove), and audit-log
+writes + pagination all verified both manually (`curl`) and by the automated suite.
+
+| Step | Status | Notes |
+|---|---|---|
+| 1. BRANCH | done | `feat/auth-workspaces`, created from `main` after Phase 1 merged |
+| 2. READ | done | |
+| 3. EXPLORE | done | Phase 1's `deps.py`/`errors.py`/`models/{user,workspace}.py` read before writing docs |
+| 4. DOCUMENT | done | `docs/modules/phase-2-auth-workspaces/{PRD,FRD,NFR}.md` committed (`f5c67dd`) before any code — no retroactive gap this time |
+| 5. CODE-BE | done | `auth_service.py`, `workspace_service.py`, `rate_limit.py`, `api/v1/{auth,workspaces}.py`, `schemas/{auth,workspace}.py`, new Alembic revision `26904cf682b7` (invite_code) — commit `2e6a2ba` |
+| 6. TEST-BE | done | `ruff`/`mypy --strict`/`pytest` clean; 34 tests against a real DB (not mocked) covering the full auth+workspace flow |
+| 7. REVIEW-BE | **APPROVED** | First pass: 2 BLOCKING (refresh() leaked which failure case via its error message, violating the NFR's no-enumeration rule; `workspace_service.py` had zero structlog events despite the NFR requiring them) + 1 WARNING (rate limit only unit-tested, never through the real route) + 1 NOTE (FRD path text stale). All fixed (`1313e65`), re-reviewed → APPROVED, 0/0/0. |
+| 8. CODE-FE | n/a | No frontend deliverable in this phase (Phase 3) |
+| 9. TEST-FE | n/a | Same reason |
+| 10. REVIEW-FE | n/a | Same reason |
+| 11. TEST-E2E | deferred | Same reasoning as Phase 1 (ADR 0001 §4) — no frontend/seed yet. This phase's `pytest` suite hits the real ASGI app + real DB, which is the closest thing to an integration test available at this point. |
+| 12. PUSH | pending | |
+| 13. PR | pending | |
+| 14. MERGE | pending | |
+
+### Bugs found only by an actual `curl`/live walkthrough (not by ruff/mypy/pytest alone)
+
+- **Refresh cookie `Path` didn't match the mounted route.** Set to `/auth` (the
+  router's own prefix) but `app.main` mounts the router under `/api/v1`, so the real
+  path is `/api/v1/auth/refresh`. A cookie's `Path` is a prefix match against the
+  request URL, not the router's declared prefix — the cookie was silently never sent
+  back. Every automated check was green throughout; only a live `curl` walkthrough
+  caught it. See ADR 0002 §4.
+- **`httpx`'s test client enforces `Secure`-cookie semantics like a real browser** —
+  over the plain-`http://test` ASGI transport, a `Secure`-flagged cookie is silently
+  withheld on every automatic request, unlike `curl` (which ignores `Secure`
+  entirely). This masked the cookie-path bug above during manual `curl` testing
+  working fine, then made the *automated* tests fail differently once written. Fixed
+  by overriding `COOKIE_SECURE=false` inside the test process only
+  (`tests/conftest.py`), never touching the shipped default. See ADR 0002 §5.
+- **`CursorPage[AuditLog]` crashed the entire app at import time**, not just the
+  audit-log endpoint — `CursorPage` is a Pydantic generic and `AuditLog` is a raw
+  SQLAlchemy ORM class, which Pydantic can't build a schema for. Caught immediately
+  (the `api` container failed to boot at all), fixed by having the service layer
+  return plain `tuple[list[AuditLog], str | None]` and moving the actual
+  `CursorPage[AuditLogEntryOut]` construction to the route layer, where it belongs.
+  See ADR 0002 §6.
+- **The rate limiter's IP extraction drifted from its own FRD** — the FRD documented
+  `X-Forwarded-For`-first extraction (needed once this deploys behind Fly.io/Render's
+  proxy, per plan.md §10), but the route implementation only used
+  `request.client.host`. Caught by the code-reviewer while adding a real
+  integration test for the rate limit (not by the original implementation pass).
+  Fixed with a small `_client_ip()` helper.
+- **The async-test DB engine bug from disposing across event loops** (see Phase 1 for
+  the same class of issue, though this is the first phase to actually hit it — Phase
+  1's tests mocked the DB engine entirely). `app.db.session`'s module-level cached
+  engine gets bound to whichever event loop first created it; pytest-asyncio gives
+  each test function its own loop by default, so the second DB-touching test failed
+  with "Future attached to a different loop." Fixed with an autouse fixture that
+  disposes the engine after every test.
+
 ## Phase 3 — Frontend Foundation — pending
 ## Phase 4 — Service Catalog & Graph Traversal — pending
 ## Phase 5 — Ingestion Pipeline & Job Queue — pending
