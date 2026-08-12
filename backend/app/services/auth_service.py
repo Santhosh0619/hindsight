@@ -68,6 +68,7 @@ async def signup(
     access_token, raw_refresh = await issue_token_pair(db, user)
     await db.commit()
     logger.info("user_signed_up", user_id=str(user.id))
+    logger.info("workspace_created", workspace_id=str(workspace.id), actor_user_id=str(user.id))
     return user, access_token, raw_refresh
 
 
@@ -84,13 +85,21 @@ async def login(db: AsyncSession, *, email: str, password: str) -> tuple[User, s
     return user, access_token, raw_refresh
 
 
+# One message for every failure branch below — deliberately not distinguishing
+# "not found" from "expired" from "reused" from "inactive user" in what the caller
+# sees, for the same no-enumeration reason login() uses a single message. The reuse
+# case in particular must not have a distinguishable message: telling a caller "this
+# token was already used" is itself a tell to whoever is holding the replayed token.
+_REFRESH_FAILURE_MESSAGE = "Invalid refresh token"
+
+
 async def refresh(db: AsyncSession, *, raw_token: str) -> tuple[User, str, str]:
     token_hash = hash_refresh_token(raw_token)
     result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
     token_row = result.scalar_one_or_none()
 
     if token_row is None:
-        raise UnauthorizedError("Invalid refresh token")
+        raise UnauthorizedError(_REFRESH_FAILURE_MESSAGE)
 
     if token_row.revoked_at is not None:
         # Reuse of an already-spent token: revoke the whole family for this user so a
@@ -102,17 +111,17 @@ async def refresh(db: AsyncSession, *, raw_token: str) -> tuple[User, str, str]:
             .values(revoked_at=datetime.now(UTC))
         )
         await db.commit()
-        raise UnauthorizedError("Refresh token has already been used")
+        raise UnauthorizedError(_REFRESH_FAILURE_MESSAGE)
 
     if token_row.expires_at < datetime.now(UTC):
-        raise UnauthorizedError("Refresh token has expired")
+        raise UnauthorizedError(_REFRESH_FAILURE_MESSAGE)
 
     token_row.revoked_at = datetime.now(UTC)
 
     user_result = await db.execute(select(User).where(User.id == token_row.user_id))
     user = user_result.scalar_one_or_none()
     if user is None or not user.is_active:
-        raise UnauthorizedError("User not found or inactive")
+        raise UnauthorizedError(_REFRESH_FAILURE_MESSAGE)
 
     access_token, raw_refresh = await issue_token_pair(db, user)
     await db.commit()

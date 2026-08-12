@@ -6,9 +6,12 @@ from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ConflictError, NotFoundError
+from app.core.logging import get_logger
 from app.core.pagination import decode_cursor, encode_cursor
 from app.models.user import User
 from app.models.workspace import AuditLog, Workspace, WorkspaceMember, WorkspaceRole
+
+logger = get_logger(__name__)
 
 _SLUG_INVALID_CHARS = re.compile(r"[^a-z0-9]+")
 
@@ -69,6 +72,7 @@ async def create_workspace(db: AsyncSession, *, owner: User, name: str) -> Works
     )
     await db.commit()
     await db.refresh(workspace)
+    logger.info("workspace_created", workspace_id=str(workspace.id), actor_user_id=str(owner.id))
     return workspace
 
 
@@ -227,6 +231,13 @@ async def change_member_role(
     )
     await db.commit()
     await db.refresh(member)
+    logger.info(
+        "workspace_member_role_changed",
+        workspace_id=str(workspace_id),
+        target_user_id=str(target_user_id),
+        new_role=new_role.value,
+        actor_user_id=str(actor_user_id),
+    )
     return member
 
 

@@ -74,9 +74,20 @@ async def logout(request: Request, db: DbSession, response: Response) -> None:
     response.delete_cookie(key=_REFRESH_COOKIE_NAME, path=_REFRESH_COOKIE_PATH)
 
 
+def _client_ip(request: Request) -> str:
+    # Behind Fly.io/Render's reverse proxy (plan.md §10's hosting choices),
+    # request.client.host is the proxy's own address, not the caller's — take the
+    # first hop of X-Forwarded-For when present, since that's what the proxy sets to
+    # the original client IP.
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 @router.post("/demo", response_model=AuthResponse)
 async def demo(request: Request, db: DbSession, response: Response) -> AuthResponse:
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = _client_ip(request)
     if not demo_signup_bucket.consume(client_ip):
         raise RateLimitedError("Too many demo sessions requested — try again shortly")
 
