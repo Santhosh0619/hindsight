@@ -17,7 +17,7 @@
 - Passwords: argon2id via `argon2-cffi` (Phase 1 primitive, unchanged).
 - Refresh tokens: opaque, SHA-256-hashed at rest (Phase 1 primitive); rotation +
   reuse-family-revocation implemented in this phase per FR-03.
-- Refresh cookie: `httpOnly`, `Secure`, `SameSite=Lax`, scoped to `/auth` (not
+- Refresh cookie: `httpOnly`, `Secure`, `SameSite=Lax`, scoped to `/api/v1/auth` (not
   site-wide) so it's never sent to unrelated endpoints. Access token is never cookied —
   returned in the JSON body only, per plan.md Phase 2's explicit split (kept in memory
   by the frontend in Phase 3).
