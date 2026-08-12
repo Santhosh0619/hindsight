@@ -69,3 +69,27 @@ through both its DB-reachable and DB-unreachable branches, plus unit coverage of
 security/pagination primitives. Full Playwright e2e coverage resumes at Phase 3 (once
 there's a user-facing journey to click through) and the isolated compose stack becomes
 runnable again once Phase 11 lands `app.seed.seed`.
+
+## 5. `pre-push`'s backend checks run inside the `api` container, not on the host
+
+**Context.** `.claude/hooks/pre-push` originally ran `python -m ruff`/`mypy`/`pytest`
+directly on the host. This broke two ways in practice: the host's system-wide `ruff`
+(0.6.9, predating this project's `ruff>=0.7`) still enforces `ANN101`, a rule the
+project's `ruff.toml` deliberately stopped ignoring because the *pinned* ruff version
+(0.16.2, inside the `api` image) removed the rule upstream — so host and container
+disagreed about whether the same code was clean. The host also had no `mypy` and none of
+`backend/pyproject.toml`'s runtime dependencies installed at all, and installing that
+full set natively (`torch`, `langchain`, `sentence-transformers`, several GB) would
+duplicate what the Docker image already provides, on a machine already low on disk space
+during this same phase's development (see the Docker Desktop disk-pressure note in
+`docs/progress.md`'s Phase 1 section).
+
+**Decision.** `pre-push`'s backend section now runs `docker compose exec api ruff
+check .` / `mypy app --strict` / `pytest tests/`, starting `db`+`api` first if they
+aren't already up — the exact same command surface the Makefile's `test-be` target and
+CI use, so "passes the hook" and "passes CI" mean the same thing by construction, and no
+backend dependency ever needs installing on the host at all. Alternative considered and
+rejected: pin/upgrade the host's native Python toolchain to match the container exactly
+— rejected as an ongoing maintenance burden (two toolchains to keep in sync instead of
+one) for a project whose entire backend already assumes a Docker dev environment
+(`docker-compose.yml`, `Makefile`'s `shell-api`/`shell-db` targets).

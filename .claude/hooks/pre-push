@@ -20,23 +20,31 @@ if echo "$AUTHOR_NAME" | grep -qiE "(claude|anthropic|assistant)"; then
 fi
 echo -e "${GREEN}✓ Branch: $BRANCH | Author: $AUTHOR_NAME${NC}"
 
-# 3. Backend checks (only once there's an actual backend project to check)
+# 3. Backend checks — run inside the api container, not on the host. The host
+#    has no reason to carry backend/pyproject.toml's dependency set (torch,
+#    langchain, etc. — multiple GB), and a native host toolchain silently drifts
+#    from the pinned versions in the Docker image (e.g. an old system-wide ruff
+#    still enforcing a rule the project's ruff.toml deliberately dropped because
+#    the pinned ruff version removed it upstream). docker compose exec runs the
+#    exact same command Makefile's test-be target and CI use.
 if [[ -d "backend" && -f "backend/pyproject.toml" ]]; then
   echo ""
-  echo "Backend checks..."
-  cd backend
+  echo "Backend checks (in the api container)..."
 
-  python -m ruff check . --quiet || { echo -e "${RED}BLOCKED: ruff errors${NC}"; exit 1; }
+  if ! docker compose ps --status running --services 2>/dev/null | grep -qx api; then
+    echo "  starting db + api..."
+    docker compose up -d db api >/dev/null 2>&1 \
+      || { echo -e "${RED}BLOCKED: could not start db/api containers for backend checks${NC}"; exit 1; }
+  fi
+
+  docker compose exec -T api ruff check . || { echo -e "${RED}BLOCKED: ruff errors${NC}"; exit 1; }
   echo -e "${GREEN}  ✓ ruff${NC}"
 
-  python -m mypy app --strict --no-error-summary 2>&1 | tail -3
-  python -m mypy app --strict --quiet || { echo -e "${RED}BLOCKED: mypy errors${NC}"; exit 1; }
+  docker compose exec -T api mypy app --strict || { echo -e "${RED}BLOCKED: mypy errors${NC}"; exit 1; }
   echo -e "${GREEN}  ✓ mypy${NC}"
 
-  python -m pytest tests/ -q --tb=line --no-header || { echo -e "${RED}BLOCKED: pytest failures${NC}"; exit 1; }
+  docker compose exec -T api pytest tests/ -q --tb=short --no-header || { echo -e "${RED}BLOCKED: pytest failures${NC}"; exit 1; }
   echo -e "${GREEN}  ✓ pytest${NC}"
-
-  cd ..
 fi
 
 # 4. Frontend checks
