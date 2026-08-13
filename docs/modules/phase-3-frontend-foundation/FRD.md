@@ -63,10 +63,12 @@ future dashboard use), `Timestamp` (relative + absolute on hover, monospace).
 - `src/pages/Landing.tsx` (F1) — problem statement, two CTAs (signup / try demo).
 - `src/pages/Login.tsx`, `src/pages/Signup.tsx` (F2) — forms, inline validation errors
   surfaced from `ApiError`, a demo-entry link.
-- `src/pages/Onboarding.tsx` (F3) — two-choice screen, calls `POST /workspaces` for
-  "Start empty"; "Seed with demo data" is present but visibly labeled
-  "coming in a later phase" and creates the same empty workspace for now (honest about
-  the Phase 11 gap, not a dead button).
+- `src/pages/Onboarding.tsx` (F3) — two-choice screen. Signup already creates the
+  user's personal workspace (Phase 2), so neither choice calls `POST /workspaces` —
+  that would leave the user with a redundant second workspace. "Start empty" simply
+  proceeds to the dashboard with the existing workspace; "Seed with demo data" is
+  present but disabled with a "coming in Phase 11" label (honest about the gap, not a
+  dead button that silently does nothing).
 - `src/pages/StubRoute.tsx` — generic `EmptyState` for every F4–F14 route, reused by
   `routes.tsx`'s route table.
 
