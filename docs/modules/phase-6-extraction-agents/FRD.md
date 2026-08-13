@@ -77,12 +77,14 @@ tried — callers handle this by degrading, never by crashing.
 
 `build_router(settings: Settings) -> LLMRouter` constructs the provider list from
 `Settings`: `GeminiProvider` only if `llm_api_key` is set, `GroqProvider` only if
-`groq_api_key` is set, `OllamaProvider` always included last (no key required, but a
-connection failure to an unreachable local Ollama server is just another
-`tenacity`-retried-then-skipped provider in the chain). If no provider is configured
-at all, `build_router` returns a router with an empty provider list, whose first call
-immediately raises `LLMUnavailableError` — matches FR-09's "fails cleanly" requirement
-without special-casing "zero providers" as a separate code path.
+`groq_api_key` is set, `OllamaProvider` always included last (no key required). In this
+build's actual configuration (no Gemini/Groq key, no local Ollama server running), the
+provider list is just `[Ollama]`, and its connection failure against an unreachable
+`localhost:11434` is what the router's normal "every provider failed" path turns into
+`LLMUnavailableError` — matching FR-09's "fails cleanly" requirement without a separate
+"zero providers configured" code path. `OllamaLLMProvider` is never omitted from the
+list even with no other providers configured, since it's plan.md §10's documented
+zero-key local fallback, not an optional extra.
 
 ### `app/services/llm/cache.py`
 
