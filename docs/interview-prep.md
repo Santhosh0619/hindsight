@@ -253,3 +253,84 @@ binary, a browser enforcing CORS, a config file pointing at the wrong port), and
 was found the same way: comparing what a direct `curl`/`docker exec` check shows
 against what the browser actually receives, then trusting the discrepancy over the
 assumption.
+
+---
+
+## Phase 4 — Service Catalog & Graph Traversal
+
+**Q: Why is graph traversal implemented as a recursive Postgres CTE instead of pulling
+in a graph database?**
+
+A: plan.md commits to one database for the whole project — adding Neo4j (or any second
+store) for one feature would mean a second thing to run, back up, and keep consistent
+with Postgres, for a graph that's small and highly relational at this project's scale
+(a company's service catalog, not a social network). The traversal logic sits behind a
+`GraphStore` Protocol (`app/services/graph_store.py`), so if the graph ever did outgrow
+what a CTE handles well, a different implementation could satisfy the same interface
+without any caller changing. Two properties make the CTE approach safe: a `path` array
+carried through the recursion rejects any next hop already visited, so a cycle in the
+dependency data can only ever grow the result to at most one row per service — the
+query always terminates without needing a hard depth cap (though one exists anyway, as
+a documented product parameter, not a safety mechanism). And `DISTINCT ON (service_id)
+... ORDER BY depth ASC` collapses a diamond dependency (two paths reaching the same
+service) down to its shortest path, counted once.
+
+**Q: A bind parameter silently never got substituted, and the error message didn't
+point anywhere near the real cause. What happened?**
+
+A: `WHERE s.id = ANY(:start_ids::uuid[])` looks like a normal named bind parameter
+followed by a Postgres type cast — but SQLAlchemy's textual-SQL parser treats a colon
+immediately followed by another colon as *not* a bind parameter, specifically to avoid
+colliding with `::` cast syntax elsewhere in a query. So `:start_ids` was never
+recognized or substituted at all; the compiled SQL sent to asyncpg still literally
+contained `:start_ids::uuid[]`, which the database rejected as a syntax error with no
+indication that a Python-level parameter binding was the actual cause. The fix is a
+single space — `:start_ids ::uuid[]` — which is semantically identical Postgres but
+takes a different path through SQLAlchemy's parser. Neither `ruff` nor `mypy` can catch
+this class of bug; it only showed up because the tests run against a real Postgres
+instance rather than a mock.
+
+**Q: `ServiceTier` needed its own tier-weight lookup table keyed by strings like
+`"TIER_1"` instead of the integers `1`/`2`/`3` the enum actually holds. Why?**
+
+A: Every other enum in this codebase stores its Python member's *value* as the Postgres
+label (`EdgeKind.CALLS` stores `"calls"`), via a `values_callable` helper applied
+consistently since Phase 1. `ServiceTier` is the deliberate exception — its column
+stores the member *name* (`"TIER_1"`), chosen because it reads better in a raw database
+session than a bare `1`. The blast-radius scorer queries `services.tier` with raw SQL
+rather than through the ORM (for a plain batch lookup, not worth a full model
+round-trip), so it sees exactly what's stored — the string, not the int. Keying the
+weight table by those strings, with a comment pointing at the ADR explaining why, keeps
+the next person who touches this code from "fixing" it back to the wrong assumption.
+
+**Q: The blast-radius scoring formula matched the FRD for a direct dependency but
+diverged for anything two hops away. What was the bug, and how was it caught?**
+
+A: The FRD's formula sums each edge's criticality weight along a path, then multiplies
+by the target service's tier weight and divides by depth. The first implementation
+instead *averaged* the path's edge weights. For a one-hop path both formulas give the
+same answer — sum of one term equals mean of one term — which is exactly the case the
+original test suite covered, so it passed clean. The code-reviewer sub-agent caught it
+by reading the FRD's summation notation literally against the code rather than trusting
+that "the tests pass" meant "the formula is right." The fix is one line (drop the
+`/ len(criticalities)`), and the regression test added afterward asserts an exact score
+value on a two-hop, mixed-criticality path — not just that scores are ordered
+correctly, since an ordering-only assertion is exactly the kind of check that would have
+let both the sum and the mean version pass.
+
+**Q: What's the general lesson from this phase about what automated checks can and
+can't catch?**
+
+A: Three different bug classes surfaced this phase, and each needed a different kind of
+check to catch: a wrong scoring formula (caught by a documentation-literate code
+reviewer, not a type checker — the code was perfectly well-typed and internally
+consistent, just wrong relative to the spec), a SQL parameter-substitution bug (caught
+only by running real tests against a real Postgres instance, since the query was
+syntactically valid Python and only failed at the database), and a mistyped response
+field (`list[uuid.UUID]` instead of `list[ServiceOut]`, caught by a reviewer comparing
+the code to the FRD's documented response shape, since Pydantic happily validates
+either shape on its own). `ruff` and `mypy --strict` were clean through all three —
+they check internal consistency, not correctness against a spec or against a live
+dependency. That's exactly why this project's workflow has both a mandatory
+code-review step and real integration tests as separate, non-overlapping gates rather
+than treating "static checks pass" as good enough.
