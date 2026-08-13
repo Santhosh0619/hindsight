@@ -205,3 +205,23 @@ bugs in test infrastructure nobody had run end-to-end before. Each was root-caus
 directly comparing "what does `curl`/`docker exec cat` show" against "what does the
 browser actually receive," the same debugging discipline ADR 0001 and ADR 0002 already
 established for this project.
+
+## 10. `pre-push`'s frontend section had never actually run — and had a real bug
+
+**Context.** `.claude/hooks/pre-push`'s frontend section was guarded by `-f
+frontend/package.json`, which didn't exist until this phase — so it had been dormant
+since the hook was first written, never once executed. The first real run failed
+immediately: `npx tsc --noEmit --quiet` — `--quiet` isn't a `tsc` flag at all (that's
+an ESLint option that leaked in, presumably copied from the ESLint invocation
+elsewhere in the same file). The section also ran natively on the host, the exact
+pattern ADR 0001 §5 already fixed for the backend section for the same reasons
+(toolchain drift, no need to install anything on the host).
+
+**Decision.** Fixed the same way as the backend section: `docker compose exec web
+...` instead of native `npx` calls, starting `db`+`api`+`web` first if not already
+running. Also expanded it to run the full local quality bar from
+`.claude/skills/test-runner.md`'s frontend spec (`tsc`, `eslint --max-warnings 0`,
+`prettier --check`, `vitest run`, `vite build`) rather than just `tsc`+`build` — CI's
+own frontend job currently only runs `tsc`/`prettier`/`build` and not `eslint`/
+`vitest`, which is a narrower bar than the project's own skill definition calls for;
+left as noted here rather than expanding this phase's scope to also fix `ci.yml`.

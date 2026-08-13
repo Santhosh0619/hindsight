@@ -47,20 +47,33 @@ if [[ -d "backend" && -f "backend/pyproject.toml" ]]; then
   echo -e "${GREEN}  ✓ pytest${NC}"
 fi
 
-# 4. Frontend checks
+# 4. Frontend checks — run inside the web container, same reasoning as backend's
+#    (point 3 above / ADR 0001 §5): no frontend dependency needs installing natively
+#    on the host, and hook-pass means the same thing as CI-pass by construction.
 if [[ -d "frontend" && -f "frontend/package.json" ]]; then
   echo ""
-  echo "Frontend checks..."
-  cd frontend
+  echo "Frontend checks (in the web container)..."
 
-  npx tsc --noEmit --pretty false 2>&1 | head -20
-  npx tsc --noEmit --quiet || { echo -e "${RED}BLOCKED: TypeScript errors${NC}"; exit 1; }
+  if ! docker compose ps --status running --services 2>/dev/null | grep -qx web; then
+    echo "  starting db + api + web..."
+    docker compose up -d db api web >/dev/null 2>&1 \
+      || { echo -e "${RED}BLOCKED: could not start db/api/web containers for frontend checks${NC}"; exit 1; }
+  fi
+
+  docker compose exec -T web npx tsc --noEmit || { echo -e "${RED}BLOCKED: TypeScript errors${NC}"; exit 1; }
   echo -e "${GREEN}  ✓ tsc${NC}"
 
-  npm run build --silent || { echo -e "${RED}BLOCKED: build failed${NC}"; exit 1; }
-  echo -e "${GREEN}  ✓ build${NC}"
+  docker compose exec -T web npx eslint src --max-warnings 0 || { echo -e "${RED}BLOCKED: eslint errors${NC}"; exit 1; }
+  echo -e "${GREEN}  ✓ eslint${NC}"
 
-  cd ..
+  docker compose exec -T web npx prettier --check "src/**/*.{ts,tsx,css}" || { echo -e "${RED}BLOCKED: prettier formatting${NC}"; exit 1; }
+  echo -e "${GREEN}  ✓ prettier${NC}"
+
+  docker compose exec -T web npx vitest run || { echo -e "${RED}BLOCKED: vitest failures${NC}"; exit 1; }
+  echo -e "${GREEN}  ✓ vitest${NC}"
+
+  docker compose exec -T web npx vite build || { echo -e "${RED}BLOCKED: build failed${NC}"; exit 1; }
+  echo -e "${GREEN}  ✓ build${NC}"
 fi
 
 echo ""
