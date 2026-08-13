@@ -13,8 +13,9 @@ os.environ.setdefault("COOKIE_SECURE", "false")
 
 import pytest  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
+from sqlalchemy.ext.asyncio import AsyncSession  # noqa: E402
 
-from app.db.session import dispose_engine  # noqa: E402
+from app.db.session import dispose_engine, get_session_factory  # noqa: E402
 from app.main import create_app  # noqa: E402
 
 
@@ -36,6 +37,15 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+@pytest.fixture
+async def db() -> AsyncGenerator[AsyncSession, None]:
+    # A raw session for tests that exercise a service/worker module directly (queue
+    # claim/backoff, ingestion pipeline steps) rather than through the HTTP API.
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        yield session
 
 
 def unique_email() -> str:

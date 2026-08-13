@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     # App behaviour
     demo_mode: bool = True
     max_upload_bytes: int = 10_485_760
+    # A worker that claims a job and crashes before completing/failing it leaves the
+    # job stuck `running` -- another worker reclaims it once its lease is this old.
+    job_lease_seconds: int = 120
     retrieval_top_k: int = 20
     rrf_k: int = 60
     critic_threshold: float = 0.7

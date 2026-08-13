@@ -7,6 +7,7 @@ from sqlalchemy import text
 
 from app.api.v1.auth import router as auth_router
 from app.api.v1.catalog import router as catalog_router
+from app.api.v1.postmortems import router as postmortems_router
 from app.api.v1.workspaces import router as workspaces_router
 from app.core.config import get_settings
 from app.core.errors import AppError, app_error_handler
@@ -49,6 +50,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(workspaces_router, prefix="/api/v1")
     app.include_router(catalog_router, prefix="/api/v1")
+    app.include_router(postmortems_router, prefix="/api/v1")
 
     @app.get("/health")
     async def health() -> dict[str, object]:
