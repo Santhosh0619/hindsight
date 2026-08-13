@@ -6,7 +6,7 @@
  * tokens in one file"). Dark-first, restrained accents, calm/dense inside the app
  * shell (this is an operations tool) — with more visual presence on the public-facing
  * marketing surface (landing/auth), where a portfolio project earns its first
- * impression. See docs/decisions/0003-phase-3-design-refresh.md.
+ * impression. See docs/decisions/0003-phase-3-frontend-foundation.md.
  */
 @theme {
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;

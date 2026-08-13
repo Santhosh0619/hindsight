@@ -11,13 +11,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
-import { useAuth } from "@/lib/auth";
+import { useAuth, useRequireRole } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { SCREENS } from "@/lib/screens";
 
 export function AppShell(): React.JSX.Element {
   const { user, memberships, currentMembership, setCurrentWorkspace, logout } = useAuth();
   const navigate = useNavigate();
+  // FR-07: Settings (F13) is entirely a write/admin surface — members & roles, API
+  // keys, LLM provider selection, workspace deletion (plan.md §6). It's the one
+  // write-triggering entry point that actually exists in the shell this phase, so
+  // it's the one gated; every other write action described in FR-07 doesn't have UI
+  // yet and will be gated in the phase that builds it.
+  const canSeeSettings = useRequireRole("owner", "responder");
+  const visibleScreens = SCREENS.filter((screen) => screen.path !== "/settings" || canSeeSettings);
 
   const handleLogout = async (): Promise<void> => {
     await logout();
@@ -66,7 +73,7 @@ export function AppShell(): React.JSX.Element {
         <Separator />
 
         <nav className="flex-1 overflow-y-auto p-2">
-          {SCREENS.map((screen) => (
+          {visibleScreens.map((screen) => (
             <NavLink
               key={screen.path}
               to={screen.path}

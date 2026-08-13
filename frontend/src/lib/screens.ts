@@ -1,5 +1,10 @@
 // Single source of truth for the 14 screens in plan.md §6 — both AppShell's sidebar
 // and routes.tsx's stub-route table read from this so the two never drift apart.
+//
+// F6 "Incident Detail" is deliberately absent: it's a contextual /incidents/:id
+// page reached by clicking into a row on F7 (Incidents), not a top-level sidebar
+// destination in its own right — plan.md doesn't list it as one either. It'll get
+// its own route (not a sidebar entry) when Phase 9 builds it.
 
 export interface ScreenDef {
   path: string;

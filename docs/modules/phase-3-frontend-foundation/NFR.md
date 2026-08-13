@@ -43,15 +43,22 @@
 ## Testability
 
 - Component tests (Vitest + React Testing Library): `apiFetch`'s 401-retry-and-queue
-  behavior (mocked fetch), `AuthProvider`'s three status transitions, `ProtectedRoute`'s
-  redirect behavior, form validation/error rendering on Login/Signup.
-- No E2E yet — same reasoning as Phases 1–2's ADRs: this phase is *what* Playwright
-  will eventually drive, but per Master-Prompt.md's workflow, e2e is written once
-  there's a stable UI to test against and the isolated compose stack
-  (`docker-compose.test.yml`) can build both `api-test` and `web-test` — this phase is
-  what finally makes `web-test` buildable (it needs `frontend/package.json`, which
-  didn't exist before now). E2E-tester sub-agent runs after this phase's manual browser
-  verification confirms the UI is stable.
+  behavior (mocked fetch), `AuthProvider`'s three status transitions (including a
+  StrictMode regression test for the boot-refresh race, ADR 0003 §2), `ProtectedRoute`'s
+  redirect behavior, form validation/error rendering on Login/Signup, `AppShell`'s
+  FR-07 role gating.
+- E2E (Playwright, `docker-compose.test.yml`): this phase makes `web-test` buildable
+  for the first time (`frontend/package.json` didn't exist before now), and unblocks
+  e2e coverage for everything that doesn't need seed data — auth, workspaces, and this
+  phase's UI all create their own data via signup. `e2e/tests/auth-frontend.spec.ts`
+  covers Landing, signup → onboarding → dashboard, duplicate-email error, session
+  persistence across a hard reload, protected-route redirect, and logout.
+  `e2e/tests/rbac-shell.spec.ts` provisions a real owner + viewer through the API and
+  verifies FR-07's gating through the actual UI. Catalog/incident/knowledge-base e2e
+  coverage stays deferred until those features and Phase 11's seed data exist — see
+  ADR 0003 §8 for the full reasoning and §9 for three infrastructure bugs
+  (`web-test`'s healthcheck, CORS, cookie security) found only by actually running
+  this stack for the first time.
 
 ## Constraints
 
