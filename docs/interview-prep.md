@@ -171,3 +171,85 @@ unit test that mocks the HTTP layer wouldn't exercise real cookie-path matching 
 — this only surfaced from an actual `curl` walkthrough of the running endpoint. The
 lesson generalized into this phase's workflow: cookie/session code gets a live
 request-response walkthrough, not just green checks, before being called done.
+
+---
+
+## Phase 3 — Frontend Foundation
+
+**Q: Why does the access token live only in React state, while the refresh token is a
+cookie?**
+
+A: Same split plan.md specifies for Phase 2, implemented on the frontend now: the
+access token is short-lived and read on every request, so keeping it in memory means
+an XSS payload that runs in the page can't read it from `localStorage` — there's
+nothing there to read. It does mean the token is gone on every hard reload, which is
+exactly why `AuthProvider` calls `/auth/refresh` on mount before rendering anything
+auth-gated — the httpOnly refresh cookie (invisible to JS, sent automatically by the
+browser) is what actually survives the reload, and the access token gets silently
+re-minted from it.
+
+**Q: A hard reload used to log users out. What was actually happening, and why didn't
+tests catch it first?**
+
+A: React 18's StrictMode intentionally double-invokes effects in development to help
+catch side-effect bugs — and it did, just not the one it was designed for. It fired
+`AuthProvider`'s boot-time `/auth/refresh` call twice, almost simultaneously. Phase
+2's refresh tokens are single-use with reuse detection: the first call legitimately
+rotated the token; the second call, arriving microseconds later with the
+now-already-revoked token, looked identical to a stolen-token replay and revoked the
+whole session — including the one the first call had just established. It wasn't
+caught by `tsc`/`eslint`/the first pass of unit tests because none of them render
+under `<React.StrictMode>` by default and none of them assert *how many times* a
+mocked endpoint was called — the fix (a `useRef` guard so the boot effect's real logic
+runs once regardless of how many times React invokes the callback) came with a
+regression test that specifically renders under StrictMode and asserts the refresh
+endpoint was hit exactly once. The deeper point: this isn't just a StrictMode quirk —
+two browser tabs reloading within the same narrow window hit the identical race in
+production, where StrictMode doesn't even run.
+
+**Q: `useRequireRole` existed since the first draft but a viewer could still see every
+sidebar entry. What happened, and what does it say about the review process?**
+
+A: The hook was implemented and even exported, but nothing ever called it —
+`AppShell` rendered its full nav list unconditionally. Every automated check passed:
+`tsc` type-checks unused exports fine, `eslint` doesn't flag "this hook is defined but
+never invoked," and the manual browser walkthrough that verified the phase's other
+acceptance criteria happened to always be logged in as an owner. It was caught by the
+code-reviewer sub-agent, which reads the FRD line by line rather than just running
+tools — the FRD explicitly says `useRequireRole` should gate write-triggering UI, and
+grepping the codebase showed it wasn't called anywhere. The fix and its test came
+together: wiring `useRequireRole("owner", "responder")` into the Settings nav entry,
+plus a component test and, once e2e was unblocked, a Playwright test that provisions
+a real viewer through the actual invite-code API flow and checks the rendered UI.
+
+**Q: Why does the app's public-facing design (landing, login, signup) look
+noticeably different from the authenticated app shell?**
+
+A: They have different jobs. plan.md's original direction — dark-first, calm, dense,
+"not playful" — is exactly right for a tool a responder reads during an incident at
+2am; competing for attention there is a real cost. But a portfolio project's landing
+page is a different surface with a different job: it's the first (and sometimes only)
+thing a recruiter sees, and "correct but forgettable" doesn't get the click. The
+public surface got a deliberate tech-grid/glow background and a gradient headline
+(pure CSS, no external image asset); the `AppShell` interior kept the original
+restrained direction untouched. Splitting a design system by *where it's used* rather
+than applying one rule everywhere is itself a defensible, interview-worthy call.
+
+**Q: Getting the isolated Playwright stack running for the first time surfaced three
+infrastructure bugs with nothing to do with the app. What were they, and what's the
+common thread?**
+
+A: `web-test`'s healthcheck ran `curl`, which the `node:20-slim` base image doesn't
+ship — the container was permanently "unhealthy" even though Vite was serving
+correctly the whole time. `api-test` had no `CORS_ORIGINS` override, so it fell back
+to a default that didn't include the test frontend's port, silently blocking every
+signup/login/demo POST from the browser — surfaced only as a generic error message,
+not an obvious CORS error, until checked directly. And the local `.env` pointed the
+e2e config at the regular dev containers instead of the isolated test stack, so early
+test runs were silently exercising the wrong database entirely. The common thread:
+none of these were catchable by *reading* the code — each one only exists at the
+boundary between the app and its actual runtime environment (a container without a
+binary, a browser enforcing CORS, a config file pointing at the wrong port), and each
+was found the same way: comparing what a direct `curl`/`docker exec` check shows
+against what the browser actually receives, then trusting the discrepancy over the
+assumption.
