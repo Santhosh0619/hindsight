@@ -23,7 +23,11 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     llm_model: str = "gemini-2.5-flash"
     groq_api_key: str | None = None
+    # Free-tier model IDs move fast (Phase 0's ADR) -- re-verify against the provider
+    # before relying on these for a live call, same caution as `llm_model` above.
+    groq_model: str = "llama-3.3-70b-versatile"
     ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3"
 
     # Embeddings — no key needed, runs locally
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
