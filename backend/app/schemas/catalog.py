@@ -82,7 +82,7 @@ class EdgeOut(BaseModel):
 class BlastRadiusEntryOut(BaseModel):
     service: ServiceOut
     score: float
-    path: list[uuid.UUID]
+    path: list[ServiceOut]
     depth: int
 
 

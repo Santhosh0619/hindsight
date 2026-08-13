@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ConflictError, NotFoundError, ValidationAppError
 from app.core.logging import get_logger
-from app.models.catalog import Service, ServiceEdge, Team
+from app.models.catalog import EdgeCriticality, EdgeKind, Service, ServiceEdge, ServiceTier, Team
 from app.schemas.catalog import CatalogImport, CatalogImportResult
 
 logger = get_logger(__name__)
@@ -44,8 +44,16 @@ async def get_team(db: AsyncSession, workspace_id: uuid.UUID, team_id: uuid.UUID
     return team
 
 
-async def update_team(db: AsyncSession, *, team: Team, **fields: object) -> Team:
-    for key, value in fields.items():
+async def update_team(
+    db: AsyncSession,
+    *,
+    team: Team,
+    name: str | None = None,
+    slack_handle: str | None = None,
+    escalation_contact: str | None = None,
+) -> Team:
+    updates = {"name": name, "slack_handle": slack_handle, "escalation_contact": escalation_contact}
+    for key, value in updates.items():
         if value is not None:
             setattr(team, key, value)
     await db.commit()
@@ -63,7 +71,7 @@ async def list_services(
     workspace_id: uuid.UUID,
     *,
     team_id: uuid.UUID | None = None,
-    tier: int | None = None,
+    tier: ServiceTier | None = None,
 ) -> list[Service]:
     query = select(Service).where(Service.workspace_id == workspace_id)
     if team_id is not None:
@@ -74,8 +82,28 @@ async def list_services(
     return list(result.scalars().all())
 
 
-async def create_service(db: AsyncSession, *, workspace_id: uuid.UUID, **fields: object) -> Service:
-    service = Service(workspace_id=workspace_id, **fields)
+async def create_service(
+    db: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    name: str,
+    tier: ServiceTier,
+    team_id: uuid.UUID | None = None,
+    repo_url: str | None = None,
+    description: str | None = None,
+    runbook_url: str | None = None,
+) -> Service:
+    if team_id is not None:
+        await get_team(db, workspace_id, team_id)
+    service = Service(
+        workspace_id=workspace_id,
+        name=name,
+        tier=tier,
+        team_id=team_id,
+        repo_url=repo_url,
+        description=description,
+        runbook_url=runbook_url,
+    )
     db.add(service)
     try:
         await db.commit()
@@ -94,8 +122,38 @@ async def get_service(db: AsyncSession, workspace_id: uuid.UUID, service_id: uui
     return service
 
 
-async def update_service(db: AsyncSession, *, service: Service, **fields: object) -> Service:
-    for key, value in fields.items():
+async def get_services_by_ids(
+    db: AsyncSession, workspace_id: uuid.UUID, service_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, Service]:
+    if not service_ids:
+        return {}
+    query = select(Service).where(Service.workspace_id == workspace_id, Service.id.in_(service_ids))
+    result = await db.execute(query)
+    return {service.id: service for service in result.scalars().all()}
+
+
+async def update_service(
+    db: AsyncSession,
+    *,
+    service: Service,
+    name: str | None = None,
+    tier: ServiceTier | None = None,
+    team_id: uuid.UUID | None = None,
+    repo_url: str | None = None,
+    description: str | None = None,
+    runbook_url: str | None = None,
+) -> Service:
+    if team_id is not None:
+        await get_team(db, service.workspace_id, team_id)
+    updates = {
+        "name": name,
+        "tier": tier,
+        "team_id": team_id,
+        "repo_url": repo_url,
+        "description": description,
+        "runbook_url": runbook_url,
+    }
+    for key, value in updates.items():
         if value is not None:
             setattr(service, key, value)
     try:
@@ -123,8 +181,8 @@ async def create_edge(
     workspace_id: uuid.UUID,
     from_service_id: uuid.UUID,
     to_service_id: uuid.UUID,
-    kind: object,
-    criticality: object,
+    kind: EdgeKind,
+    criticality: EdgeCriticality,
 ) -> ServiceEdge:
     # Both endpoints must belong to this workspace -- a cross-workspace service_id
     # would otherwise silently create an edge that straddles two tenants.
@@ -173,6 +231,10 @@ async def import_catalog(
     db: AsyncSession, *, workspace_id: uuid.UUID, payload: CatalogImport
 ) -> CatalogImportResult:
     team_by_name: dict[str, uuid.UUID] = {}
+    existing_teams_result = await db.execute(select(Team).where(Team.workspace_id == workspace_id))
+    for existing_team in existing_teams_result.scalars().all():
+        team_by_name[existing_team.name] = existing_team.id
+
     for team_row in payload.teams:
         team = Team(
             workspace_id=workspace_id,
@@ -190,7 +252,15 @@ async def import_catalog(
         service_by_name[existing.name] = existing.id
 
     for service_row in payload.services:
-        team_id = team_by_name.get(service_row.team_name) if service_row.team_name else None
+        team_id = None
+        if service_row.team_name is not None:
+            team_id = team_by_name.get(service_row.team_name)
+            if team_id is None:
+                await db.rollback()
+                raise ValidationAppError(
+                    "Import references a team name that doesn't exist",
+                    detail={"team_name": service_row.team_name},
+                )
         service = Service(
             workspace_id=workspace_id,
             name=service_row.name,

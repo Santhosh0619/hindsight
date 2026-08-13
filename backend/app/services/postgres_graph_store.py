@@ -148,8 +148,11 @@ class PostgresGraphStore:
 
         reached_ids = [row["service_id"] for row in rows]
         tier_result = await self._db.execute(
-            text("SELECT id, tier FROM services WHERE id = ANY(:ids ::uuid[])"),
-            {"ids": [str(sid) for sid in reached_ids]},
+            text(
+                "SELECT id, tier FROM services WHERE id = ANY(:ids ::uuid[]) "
+                "AND workspace_id = :workspace_id"
+            ),
+            {"ids": [str(sid) for sid in reached_ids], "workspace_id": workspace_id},
         )
         tier_by_service: dict[uuid.UUID, str] = {row.id: row.tier for row in tier_result}
 
@@ -164,9 +167,7 @@ class PostgresGraphStore:
                 if tier is not None
                 else _DEFAULT_TIER_WEIGHT
             )
-            edge_weight = sum(_EDGE_CRITICALITY_WEIGHT.get(c, 0.0) for c in criticalities) / max(
-                len(criticalities), 1
-            )
+            edge_weight = sum(_EDGE_CRITICALITY_WEIGHT.get(c, 0.0) for c in criticalities)
             score = (edge_weight * tier_weight) / depth
             entries.append(
                 BlastRadiusEntry(

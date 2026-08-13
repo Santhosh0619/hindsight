@@ -150,6 +150,12 @@ async def test_service_list_filters_by_team_and_tier(client: AsyncClient) -> Non
     )
     assert [s["name"] for s in filtered.json()] == ["with-team"]
 
+    tier_filtered = await client.get(
+        f"/api/v1/workspaces/{workspace_id}/catalog/services?tier=3",
+        headers=auth_headers(token),
+    )
+    assert [s["name"] for s in tier_filtered.json()] == ["no-team"]
+
 
 async def test_edge_self_edge_rejected(client: AsyncClient) -> None:
     owner = await signup(client)
@@ -330,4 +336,56 @@ async def test_import_with_unknown_service_name_rolls_back_entirely(client: Asyn
         f"/api/v1/workspaces/{workspace_id}/catalog/graph", headers=auth_headers(token)
     )
     # nothing partially applied -- not even the service that resolved cleanly
+    assert graph_response.json()["nodes"] == []
+
+
+async def test_import_resolves_team_name_against_pre_existing_team(client: AsyncClient) -> None:
+    owner = await signup(client)
+    token = owner["access_token"]
+    workspace_id = await _my_workspace_id(client, token)
+
+    team_response = await client.post(
+        f"/api/v1/workspaces/{workspace_id}/catalog/teams",
+        json={"name": "Platform"},
+        headers=auth_headers(token),
+    )
+    team_id = team_response.json()["id"]
+
+    response = await client.post(
+        f"/api/v1/workspaces/{workspace_id}/catalog/import",
+        json={
+            "teams": [],
+            "services": [{"name": "gateway", "tier": 1, "team_name": "Platform"}],
+            "edges": [],
+        },
+        headers=auth_headers(token),
+    )
+    assert response.status_code == 200, response.text
+
+    services_response = await client.get(
+        f"/api/v1/workspaces/{workspace_id}/catalog/services", headers=auth_headers(token)
+    )
+    gateway = next(s for s in services_response.json() if s["name"] == "gateway")
+    assert gateway["team_id"] == team_id
+
+
+async def test_import_with_unknown_team_name_rolls_back_entirely(client: AsyncClient) -> None:
+    owner = await signup(client)
+    token = owner["access_token"]
+    workspace_id = await _my_workspace_id(client, token)
+
+    response = await client.post(
+        f"/api/v1/workspaces/{workspace_id}/catalog/import",
+        json={
+            "teams": [],
+            "services": [{"name": "gateway", "tier": 1, "team_name": "does-not-exist"}],
+            "edges": [],
+        },
+        headers=auth_headers(token),
+    )
+    assert response.status_code == 422
+
+    graph_response = await client.get(
+        f"/api/v1/workspaces/{workspace_id}/catalog/graph", headers=auth_headers(token)
+    )
     assert graph_response.json()["nodes"] == []

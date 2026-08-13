@@ -78,6 +78,12 @@ async def test_linear_chain_reachability_and_depths(client: AsyncClient) -> None
     assert depth_by_service == {b: 1, c: 2, d: 3}
     assert a not in depth_by_service
 
+    entry_for_c = next(e for e in radius["services"] if e["service"]["id"] == c)
+    path_ids = [hop["id"] for hop in entry_for_c["path"]]
+    assert path_ids == [a, b, c]
+    # path hops are full ServiceOut objects, not bare ids
+    assert all("name" in hop and "tier" in hop for hop in entry_for_c["path"])
+
 
 async def test_depth_cap_limits_reach(client: AsyncClient) -> None:
     owner = await signup(client)
@@ -185,3 +191,30 @@ async def test_hard_edge_scores_higher_than_soft_edge(client: AsyncClient) -> No
     # scores come back sorted descending
     ordered_ids = [e["service"]["id"] for e in radius["services"]]
     assert ordered_ids.index(hard_target) < ordered_ids.index(soft_target)
+
+
+async def test_score_sums_edge_weights_along_a_mixed_criticality_path(
+    client: AsyncClient,
+) -> None:
+    # a --(hard)--> b --(soft)--> c : edge_weight = 1.0 + 0.4 = 1.4 (summed, not averaged),
+    # tier_weight(TIER_1) = 1.0, depth = 2 -> score = 1.4 * 1.0 / 2 = 0.7
+    owner = await signup(client)
+    token = owner["access_token"]
+    workspace_id = await _my_workspace_id(client, token)
+
+    a = await _create_service(client, token=token, workspace_id=workspace_id, name="a", tier=1)
+    b = await _create_service(client, token=token, workspace_id=workspace_id, name="b", tier=1)
+    c = await _create_service(client, token=token, workspace_id=workspace_id, name="c", tier=1)
+    await _create_edge(
+        client, token=token, workspace_id=workspace_id, from_id=a, to_id=b, criticality="hard"
+    )
+    await _create_edge(
+        client, token=token, workspace_id=workspace_id, from_id=b, to_id=c, criticality="soft"
+    )
+
+    radius = await _blast_radius(
+        client, token=token, workspace_id=workspace_id, service_id=a, depth=10
+    )
+
+    entry_for_c = next(e for e in radius["services"] if e["service"]["id"] == c)
+    assert entry_for_c["score"] == 0.7

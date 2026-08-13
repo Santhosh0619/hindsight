@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 
 from app.core.deps import CurrentWorkspaceMember, DbSession, require_role
+from app.models.catalog import ServiceTier
 from app.models.workspace import WorkspaceRole
 from app.schemas.catalog import (
     BlastRadiusEntryOut,
@@ -82,8 +83,9 @@ async def list_services(
     membership: CurrentWorkspaceMember,
     db: DbSession,
     team_id: Annotated[uuid.UUID | None, Query()] = None,
+    tier: Annotated[ServiceTier | None, Query()] = None,
 ) -> list[ServiceOut]:
-    services = await catalog_service.list_services(db, workspace_id, team_id=team_id)
+    services = await catalog_service.list_services(db, workspace_id, team_id=team_id, tier=tier)
     return [ServiceOut.model_validate(s) for s in services]
 
 
@@ -143,17 +145,22 @@ async def get_blast_radius(
     store = PostgresGraphStore(db)
     radius = await store.blast_radius(workspace_id, [service_id], max_depth=depth)
 
-    entries = []
+    referenced_ids = {entry.service_id for entry in radius.entries}
     for entry in radius.entries:
-        service = await catalog_service.get_service(db, workspace_id, entry.service_id)
-        entries.append(
-            BlastRadiusEntryOut(
-                service=ServiceOut.model_validate(service),
-                score=entry.score,
-                path=entry.path.service_ids,
-                depth=entry.depth,
-            )
+        referenced_ids.update(entry.path.service_ids)
+    services_by_id = await catalog_service.get_services_by_ids(
+        db, workspace_id, list(referenced_ids)
+    )
+
+    entries = [
+        BlastRadiusEntryOut(
+            service=ServiceOut.model_validate(services_by_id[entry.service_id]),
+            score=entry.score,
+            path=[ServiceOut.model_validate(services_by_id[sid]) for sid in entry.path.service_ids],
+            depth=entry.depth,
         )
+        for entry in radius.entries
+    ]
     return BlastRadiusOut(services=entries)
 
 
