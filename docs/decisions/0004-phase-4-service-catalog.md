@@ -122,3 +122,28 @@ silently creating a tenant-straddling edge. `create_service`/`update_service` ac
 service's team across a workspace boundary yet), but a defense-in-depth gap relative to
 the rest of the module's discipline, raised as a NOTE in code review and fixed
 alongside the BLOCKING findings since the fix was one `get_team` call in each function.
+
+## 8. Line endings are pinned to LF via `.gitattributes`, found while trying to push
+
+**Context.** This branch touches only backend files, but `git push` was blocked by the
+pre-push hook's frontend `prettier --check` step failing across all 42 frontend files —
+none of which this branch modified. `frontend/.prettierrc` sets `"endOfLine": "lf"`;
+this machine's `core.autocrlf=true` converts every file to CRLF on checkout, so the
+`web` container's bind-mounted view of every frontend file had CRLF line endings that
+prettier flagged as unformatted, independent of any actual content change.
+
+**Decision.** Added a repo-root `.gitattributes` with `* text=auto eol=lf`, which pins
+checkout-time line endings to LF regardless of a given machine's local `core.autocrlf`
+setting — the correct fix at the repository level rather than asking every contributor
+to reconfigure their own git install (which `git config` changes wouldn't even persist
+across clones, and CLAUDE.md's git-safety rule forbids touching git config as a
+workaround anyway). Adding the file alone wasn't enough — the already-checked-out
+working tree still had CRLF on disk, and neither `git add --renormalize .` nor a plain
+`git checkout -- .` rewrote it, because git's own modified-file detection (via
+`core.autocrlf`'s clean filter) considered the working copy unchanged relative to the
+index even though the *actual bytes on disk* didn't match the new `eol=lf` attribute.
+Forcing an actual rewrite required deleting the tracked files from disk and checking
+them out fresh (`git ls-files -z | xargs -0 rm -f && git checkout -- .`), which have no
+prior on-disk copy to compare against and so unconditionally re-materialize under the
+current attributes. Not fixed by disabling the hook or skipping it with `--no-verify` —
+per CLAUDE.md, a failing hook means fix the underlying cause, not bypass the gate.

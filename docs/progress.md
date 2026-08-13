@@ -386,6 +386,16 @@ scoring for the graph traversal.
 
 Full detail on all seven findings and their fixes: ADR 0004 §2-7.
 
+### Infra bug found only by trying to push (unrelated to this phase's own code)
+
+- **`git push` was blocked by a frontend-wide prettier failure on a backend-only
+  branch.** This machine's `core.autocrlf=true` checks every file out as CRLF, and
+  `frontend/.prettierrc`'s `endOfLine: "lf"` flagged all 42 frontend files as
+  unformatted purely from that, unrelated to any real content change. Fixed with a
+  repo-root `.gitattributes` pinning `eol=lf`, plus a forced re-checkout to actually
+  rewrite the already-CRLF working tree (adding the attributes file alone didn't
+  retroactively fix files already on disk). See ADR 0004 §8.
+
 ## Phase 5 — Ingestion Pipeline & Job Queue — pending
 ## Phase 6 — Extraction Agents (Pydantic AI) — pending
 ## Phase 7 — Hybrid Retrieval — pending
