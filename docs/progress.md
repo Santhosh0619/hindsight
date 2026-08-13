@@ -303,6 +303,12 @@ Step 11 below.
   demo) from `web-test`'s origin were silently blocked by CORS, surfacing only as a
   generic "Couldn't start a demo session." Also proactively fixed the same
   plain-HTTP-vs-Secure-cookie issue from ADR 0002 §5 for `api-test`. See ADR 0003 §9.
+- **`pre-push`'s frontend section had never once run** (guarded by
+  `frontend/package.json` existing, which it didn't until this phase) and had a real
+  bug the moment it finally did: `tsc --noEmit --quiet` — `--quiet` isn't a `tsc`
+  flag. Fixed the same way as Phase 1's backend-section fix: runs inside the `web`
+  container now, and expanded to the full quality bar (`tsc`, `eslint`, `prettier`,
+  `vitest`, `build`) per `test-runner.md`. See ADR 0003 §10.
 
 ### Design pass (user-requested mid-phase)
 
