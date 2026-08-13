@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens — the one place color/spacing decisions live (plan.md Phase 3: "do
+ * not use default shadcn colors unchanged; choose a deliberate palette and put the
+ * tokens in one file"). Dark-first, restrained accents, calm/dense inside the app
+ * shell (this is an operations tool) — with more visual presence on the public-facing
+ * marketing surface (landing/auth), where a portfolio project earns its first
+ * impression. See docs/decisions/0003-phase-3-frontend-foundation.md.
+ */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Consolas, monospace;
+
+  --color-background: oklch(0.14 0.012 265);
+  --color-foreground: oklch(0.95 0.004 260);
+
+  --color-card: oklch(0.19 0.014 265);
+  --color-card-foreground: oklch(0.95 0.004 260);
+
+  --color-muted: oklch(0.25 0.014 265);
+  --color-muted-foreground: oklch(0.67 0.014 260);
+
+  --color-border: oklch(0.3 0.016 265);
+  --color-input: oklch(0.3 0.016 265);
+  --color-ring: oklch(0.74 0.14 215);
+
+  /* the one restrained accent, plus a second stop used only for gradients/glow —
+     never a second competing "brand color", just the far end of one gradient */
+  --color-accent: oklch(0.74 0.14 215);
+  --color-accent-foreground: oklch(0.14 0.012 265);
+  --color-accent-2: oklch(0.72 0.17 300);
+
+  --color-destructive: oklch(0.62 0.19 25);
+  --color-destructive-foreground: oklch(0.97 0.004 260);
+
+  --color-warning: oklch(0.78 0.14 80);
+  --color-warning-foreground: oklch(0.16 0.008 260);
+
+  --color-success: oklch(0.72 0.14 150);
+  --color-success-foreground: oklch(0.16 0.008 260);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
+}
+
+@layer utilities {
+  /* Subtle circuit-grid pattern for the marketing surface's tech background. Kept
+     to a low-alpha foreground mix rather than a fixed hex so it self-adjusts if the
+     tokens above ever move. */
+  .bg-tech-grid {
+    background-image:
+      linear-gradient(
+        to right,
+        color-mix(in oklch, var(--color-foreground) 7%, transparent) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        to bottom,
+        color-mix(in oklch, var(--color-foreground) 7%, transparent) 1px,
+        transparent 1px
+      );
+    background-size: 56px 56px;
+  }
+
+  .text-gradient-accent {
+    background-image: linear-gradient(to right, var(--color-accent), var(--color-accent-2));
+    background-clip: text;
+    color: transparent;
+  }
+
+  @keyframes drift {
+    0%,
+    100% {
+      transform: translate(0, 0) scale(1);
+    }
+    50% {
+      transform: translate(3%, -4%) scale(1.05);
+    }
+  }
+
+  .animate-drift {
+    animation: drift 24s ease-in-out infinite;
+  }
+
+  .animate-drift-slow {
+    animation: drift 32s ease-in-out infinite reverse;
+  }
+}
