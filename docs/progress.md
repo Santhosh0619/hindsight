@@ -226,7 +226,7 @@ writes + pagination all verified both manually (`curl`) and by the automated sui
   with "Future attached to a different loop." Fixed with an autouse fixture that
   disposes the engine after every test.
 
-## Phase 3 — Frontend Foundation — done, PR open
+## Phase 3 — Frontend Foundation — done, merged ([PR #4](https://github.com/Santhosh0619/hindsight/pull/4))
 
 Target checkpoint (Master-Prompt.md): signup → onboarding → empty dashboard, all
 through the browser. Refresh the page and stay logged in. A viewer sees no write
@@ -320,7 +320,7 @@ tech-grid/glow background, a gradient headline, and glass-morphic auth cards; th
 ADR 0003 §5, and the addendum notes added to `plan.md` §6 and `Master-Prompt.md`'s
 Phase 3 design-direction bullet.
 
-## Phase 4 — Service Catalog & Graph Traversal — done, PR open
+## Phase 4 — Service Catalog & Graph Traversal — done, merged ([PR #5](https://github.com/Santhosh0619/hindsight/pull/5))
 
 Target checkpoint (Master-Prompt.md): create teams/services/edges, query blast radius
 for a service, import a catalog in bulk — all backend, no UI this phase (the Service
@@ -396,7 +396,77 @@ Full detail on all seven findings and their fixes: ADR 0004 §2-7.
   rewrite the already-CRLF working tree (adding the attributes file alone didn't
   retroactively fix files already on disk). See ADR 0004 §8.
 
-## Phase 5 — Ingestion Pipeline & Job Queue — pending
+## Phase 5 — Ingestion Pipeline & Job Queue — done, PR open
+
+Target checkpoint (Master-Prompt.md): paste a postmortem, watch status go
+`pending → processing → indexed`, confirm chunks and 384-dim embeddings exist, and
+confirm a planted fake AWS key does not appear in `redacted_text`.
+
+Verified two ways: 82 automated backend tests (up from 52 going into this phase — 8 in
+`test_queue.py`, 11 in `test_ingestion.py`, 11 in `test_postmortems.py`) run against the
+real dev Postgres container and the real `sentence-transformers` model (no mocking).
+**Also** verified against the real `docker-compose.yml` `worker` container (not just
+pytest, which never exercises that entrypoint): posted a postmortem with a planted AWS
+key, email, and an injection phrase via `curl` against the live `api` container,
+watched the real worker claim and process it, and confirmed via `GET /postmortems/{id}`
+that both secrets were redacted in the actually-stored chunk content and
+`injection_flagged=true` — with `docker compose logs worker` showing the expected
+structured events.
+
+| Step | Status | Notes |
+|---|---|---|
+| 1. BRANCH | done | `feat/ingestion-pipeline`, created from `main` after Phase 4 merged |
+| 2. READ | done | |
+| 3. EXPLORE | done | Reviewed Phase 1's `Postmortem`/`PostmortemChunk`/`Job` models, `Settings.embedding_model`/`max_upload_bytes`, the already-scaffolded `worker` service in `docker-compose.yml`, and confirmed `sentence-transformers` was already an installed dependency before writing docs |
+| 4. DOCUMENT | done | `docs/modules/phase-5-ingestion-pipeline/{PRD,FRD,NFR}.md` committed before any code |
+| 5. CODE-BE | done | `app/workers/{queue,worker}.py` + `app/workers/handlers/ingest_postmortem.py`, `app/services/ingestion/{redact,screen,chunk,embed,index}.py`, `app/services/postmortem_service.py`, `app/api/v1/postmortems.py` |
+| 6. TEST-BE | done | `ruff`, `mypy --strict`, `pytest` (82/82) all clean, run inside the `api` container |
+| 7. REVIEW-BE | **APPROVED** | First pass: 0 BLOCKING, 1 WARNING (missing `job_claimed` log event) + 1 NOTE (missing `duration_ms` field) — both observability gaps against the NFR's explicit event/field list, not correctness bugs. Fixed both (one-line additions each); re-verified `ruff`/`mypy`/`pytest` clean after the fix. See ADR 0005 §7. |
+| 8-10 | n/a | Backend-only phase per Master-Prompt.md's phase breakdown |
+| 11. TEST-E2E | n/a | No UI this phase to exercise — same rationale as Phase 4 |
+| 12. PUSH | pending | |
+| 13. PR | pending | |
+| 14. MERGE | pending | |
+
+### Bugs found only by running real tests against a live Postgres (not by ruff/mypy)
+
+- **`claim()`'s post-UPDATE `SELECT` returned a stale Python object.** The raw-SQL
+  `SKIP LOCKED` UPDATE genuinely committed `status='running'` to the database, but a
+  session that had already loaded that `Job` earlier (e.g. the same session that
+  enqueued it) got back its old in-memory copy instead, because `expire_on_commit=False`
+  means SQLAlchemy's identity map doesn't automatically refresh already-loaded
+  attributes on a plain `SELECT`. Fixed with `.execution_options(populate_existing=True)`
+  on that query. See ADR 0005 §2.
+- **A redaction pattern ordering bug would have partially mangled connection strings.**
+  Caught proactively (before it ever shipped) by reasoning through what the email regex
+  would do to `user:pass@host` inside a connection string — moved connection-string and
+  bearer-token patterns to run before the generic email/IP patterns. See ADR 0005 §3.
+
+### Bugs found only by trying to run the suite repeatedly against a shared dev database
+
+- **`test_queue.py` assertions on exact claimed-job counts became flaky** after several
+  manual re-runs while debugging the `populate_existing` fix above — leftover
+  `queued`/`running` rows from earlier debug runs (sharing the same `kind` string) got
+  swept up by later tests' `claim()`/`reclaim_expired()` calls. Fixed by giving every
+  test its own unique job `kind`, and by asserting `reclaim_expired`'s effect on a
+  specific job rather than an exact aggregate count (which a shared table genuinely
+  can't guarantee, since `reclaim_expired` is deliberately global across workspaces and
+  kinds — a worker pool reclaims stale leases for every tenant, not just one). Would
+  never surface in CI's fresh-database-per-run isolation; purely an artifact of
+  iterating locally. See ADR 0005 §6.
+
+### Bugs found only by the code-reviewer sub-agent (not by any tool)
+
+- **`job_claimed` was never logged** — three of the NFR's four documented job-lifecycle
+  events fired (`job_completed`, `job_failed`, `job_dead_lettered`); claiming itself was
+  silent. Fixed by logging it in `Worker.run()` right after a non-empty claim.
+- **`postmortem_ingested` was missing `duration_ms`**, despite the NFR listing it
+  explicitly alongside `chunk_count`/`injection_flagged`. Fixed by timing the handler
+  from its start.
+
+Full detail on both findings and the design rationale behind the queue's reclaim/
+backoff semantics: ADR 0005.
+
 ## Phase 6 — Extraction Agents (Pydantic AI) — pending
 ## Phase 7 — Hybrid Retrieval — pending
 ## Phase 8 — LangGraph Agent Pipeline — pending

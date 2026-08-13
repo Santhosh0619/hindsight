@@ -334,3 +334,104 @@ they check internal consistency, not correctness against a spec or against a liv
 dependency. That's exactly why this project's workflow has both a mandatory
 code-review step and real integration tests as separate, non-overlapping gates rather
 than treating "static checks pass" as good enough.
+
+---
+
+## Phase 5 — Ingestion Pipeline & Job Queue
+
+**Q: Why a Postgres-backed job queue instead of Redis/Celery/RQ?**
+
+A: plan.md commits to one database for the whole project, and a queue is exactly the
+kind of thing that's easy to over-engineer for a portfolio project's actual traffic. A
+`jobs` table with `FOR UPDATE SKIP LOCKED` gives real safe-concurrent-claiming
+semantics — two workers can claim from the same queue without ever double-processing a
+row, with no external broker, no separate service to run/back up/monitor, and no new
+failure mode ("what if Redis is down") to design around. The tradeoff is throughput
+ceiling — a dedicated broker scales further — but at this project's scale (a handful of
+background jobs per postmortem, run by one or two worker replicas) that ceiling is
+nowhere close to being the bottleneck.
+
+**Q: Walk through what happens if a worker process is killed (not gracefully
+shut down) while it's in the middle of processing a job.**
+
+A: The job is left `status=running` with a `locked_at` timestamp that stops advancing,
+since nothing ever calls `complete()` or `fail()` on it. Any worker's next poll cycle —
+not necessarily the one that crashed — calls `reclaim_expired()` first, which finds
+every `running` job whose lease (`locked_at` older than `job_lease_seconds`, default
+120s) has expired and routes it through the exact same retry/backoff/dead-letter path
+an explicit handler exception would use. That routing-through-`fail()` choice matters:
+a naive "just set it back to queued" reclaim would let a job that reliably crashes its
+worker (a poison payload) loop forever, since it would never accumulate a failed
+`attempts` count. Because reclaim increments `attempts` the same as a normal failure,
+that job still eventually reaches `dead` after `max_attempts`, same as any other
+consistently-failing job.
+
+**Q: A test asserted a claimed job's status was `queued` right after `claim()`
+returned it, when the database row was actually already `running`. What was
+actually happening?**
+
+A: SQLAlchemy's identity map plus this project's `expire_on_commit=False` session
+setting. `claim()` runs the `SKIP LOCKED` UPDATE as raw SQL, then does a normal
+`select(Job)` to return typed ORM objects. If the calling session already holds a
+Python object for that job's primary key — which happens if the same session both
+enqueued and later claimed it, an easy thing to do by accident in a test — SQLAlchemy's
+default behavior for a `select()` is to return the *existing* in-memory object rather
+than overwrite its attributes from the fresh query, because nothing told it the object
+was stale. The actual database row was correct the whole time; only the Python-side
+view of it was wrong. Fixed with `.execution_options(populate_existing=True)` on that
+specific `SELECT`, which forces SQLAlchemy to overwrite already-loaded attributes
+regardless of identity-map presence. The general lesson: `expire_on_commit=False` (a
+deliberate performance choice from Phase 1) means any code path that mutates a row via
+raw SQL and then re-queries it through the ORM in the *same session* needs to opt back
+into freshness explicitly — it's not automatic.
+
+**Q: Why does `redact.py` process connection strings and bearer tokens before
+emails and IP addresses, and does the order actually matter?**
+
+A: Yes, order is load-bearing, not stylistic. A connection string like
+`postgres://svc_user:hunter2@db.internal:5432/mydb` contains a substring
+(`hunter2@db.internal`) that an email-address regex will happily match on its own,
+since the pattern doesn't care what precedes the `@` or whether a `:password@` sits in
+front of it. If the email pattern ran first, it would redact just that fragment and
+leave the rest of the connection string (scheme, username, port, path) visible and
+now-malformed, instead of the whole credential being cleanly replaced with one
+`[REDACTED_CONNECTION_STRING]` marker. Running the more specific, structurally-anchored
+patterns (connection strings, bearer tokens) before the generic ones (email, bare IPs)
+avoids this kind of partial-match interference.
+
+**Q: `sentence-transformers`' `.encode()` is a synchronous call. How does an async
+worker avoid that blocking every other in-flight job?**
+
+A: `embed()` wraps both the model's lazy first load and every `.encode()` call in
+`asyncio.to_thread(...)`, which runs the blocking call in a thread pool instead of on
+the event loop thread. Without that, a single embedding call would stall the entire
+worker process for its duration — including every other job the `asyncio.Semaphore`-
+bounded concurrency was supposed to let run alongside it, since asyncio has exactly one
+event loop thread per process. The model itself is a lazy module-level singleton
+(loaded once per worker process, guarded by an `asyncio.Lock` so two jobs racing to
+embed their first batch don't both trigger a redundant multi-second model load) —
+matching the NFR's explicit rule that this kind of local-inference work never runs
+inline in a request handler, and by extension shouldn't block a worker's event loop
+either.
+
+**Q: The pytest suite doesn't run the real `docker-compose` `worker` service — so
+how do you know the actual background-processing path works, not just the
+ingestion logic in isolation?**
+
+A: Those are deliberately two separate checks. `pytest`'s `test_postmortems.py` drives
+`handle_ingest_postmortem` directly against a claimed job — that proves the pipeline
+logic (redact → screen → chunk → embed → index) is correct, but it never actually
+exercises `python -m app.workers.worker`, the real entrypoint the `worker` container
+runs, so it can't catch a docker-compose wiring bug (wrong `DATABASE_URL`, a missing
+model-cache volume mount, an import error that only triggers via that specific
+entrypoint). Before calling this phase done, the real `worker` container was started
+and driven end-to-end via `curl` against the live `api` container: signed up, posted a
+postmortem containing a planted AWS key, email, and an injection phrase, polled
+`/status` until `indexed`, and confirmed via `GET /postmortems/{id}` that both secrets
+were redacted in the actually-stored chunk content and `injection_flagged=true` — plus
+checked `docker compose logs worker` to confirm the structured log events fired with
+the right fields. This is the same "verify against real infrastructure, not just
+mocks/simulation" discipline every prior phase's ADRs describe (a live Postgres for
+recursive CTEs, a real browser for cookie semantics) — a background worker process is
+exactly the kind of surface where "the tests pass" and "the actual deployed thing
+works" can diverge.
