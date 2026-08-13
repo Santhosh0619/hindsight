@@ -122,3 +122,86 @@ is confusing, not helpful.
 the workspace signup already created — no additional API call. "Seed with demo data" is
 present but disabled with a "coming in Phase 11" label, honest about the gap rather than
 a dead button that silently no-ops.
+
+## 7. FR-07's viewer gating was built but never wired in — caught by code review, not by any check
+
+**Context.** `useRequireRole` existed in `lib/auth.tsx` from the first draft, but
+nothing in `AppShell.tsx` actually called it — `ruff`/`tsc`/`eslint` all pass cleanly
+on dead, unused-but-exported code, and the manual browser walkthrough that verified
+this phase's other acceptance criteria never happened to check with a non-owner
+account. The code-reviewer sub-agent caught it (FINDING-001, first review pass) by
+reading the FRD's explicit requirement, not by any automated tool.
+
+**Decision.** Wired `useRequireRole("owner", "responder")` into `AppShell` to gate the
+Settings (F13) sidebar entry — the one write/admin surface that actually exists in the
+shell this phase; every other write action FR-07 describes doesn't have UI yet and
+will be gated in the phase that builds it. Added both a Vitest component test
+(mocking `useAuth`/`useRequireRole`) and, once e2e was unblocked (§8 below), a full
+Playwright test that provisions a real owner + viewer through the API, logs in as each
+through the real UI, and asserts the visible difference — the kind of check that would
+have caught this gap immediately had it existed from the start.
+
+## 8. E2E is unblocked for auth/workspace/frontend features now, not deferred to Phase 11
+
+**Context.** ADR 0001 §4 deferred all Playwright e2e coverage until Phase 11, because
+`docker-compose.test.yml`'s `api-test` hard-required `app.seed.seed` (Phase 11) to
+even start. That blocker is real for testing catalog/incident features that need seed
+data — but auth, workspaces, and this phase's UI don't need any seed data at all; they
+create their own data via signup, exactly like the manual walkthrough already did.
+Leaving e2e deferred for two more phases just because a *later* phase's dependency
+doesn't exist yet was leaving real, checkable regressions (like §7 above) uncaught.
+
+**Decision.** Guarded `api-test`'s startup command to skip the seed step when
+`app.seed.seed` isn't importable yet (`python -c 'import app.seed.seed' 2>/dev/null &&
+... || echo '...skipping'`) instead of hard-failing, so the isolated stack can start
+today and will pick up real seeding automatically the moment Phase 11 lands — no
+further change needed then. Added `e2e/tests/auth-frontend.spec.ts` (Landing, signup →
+onboarding → dashboard, duplicate-email error, session persistence across reload,
+protected-route redirect, logout) and `e2e/tests/rbac-shell.spec.ts` (provisions an
+owner + viewer through the API, verifies §7's gating through the real UI). Catalog/
+incident/knowledge-base e2e coverage stays deferred until those features and Phase
+11's seed data actually exist — this is a partial unblock, not a full reversal of ADR
+0001 §4.
+
+## 9. Three more infrastructure bugs found only by actually running the e2e stack
+
+**Context.** `docker-compose.test.yml` and `frontend/Dockerfile` existed since the
+initial setup but had never actually been exercised — `frontend/package.json` didn't
+exist until this phase, so `web-test` had never once built successfully before now.
+Standing the stack up for real (§8) surfaced three separate, unrelated bugs, each
+hiding behind the last:
+
+1. **`web-test` was permanently "unhealthy."** Its healthcheck runs `curl -f
+   http://localhost:5173/`, but `node:20-slim` doesn't ship `curl` — the command
+   itself failed every single time regardless of whether Vite was actually serving
+   correctly (it was). Fixed by installing `curl` in `frontend/Dockerfile`'s base
+   stage (matching `backend/Dockerfile`'s existing pattern) and in the production
+   (nginx:alpine) stage too, which had the identical latent bug for its own
+   healthcheck — not yet hit by anything, but would have been at Phase 18 deploy.
+2. **The local `.env` pointed `E2E_FRONTEND_URL`/`E2E_BASE_URL` at the regular dev
+   containers (`:5173`/`:8000`) instead of the isolated test stack (`:5174`/`:8001`)**
+   — `.env.example` had the correct values all along, but this machine's actual
+   `.env` didn't match it. Every e2e test run silently exercised the dev database
+   instead of the isolated one until this was caught (by noticing
+   `page.evaluate(() => window.location.href)` returned port 5173 when it should
+   have been 5174). `.env` is gitignored and personal, so this fix doesn't appear in
+   the diff — noted here so a future session hitting the same symptom (tests
+   "passing" against the wrong stack, or debug instrumentation that never fires)
+   checks this first.
+3. **`api-test` had no `CORS_ORIGINS` override**, so it fell back to
+   `Settings`'s default (`http://localhost:5173,http://localhost:3000`) — which
+   doesn't include `web-test`'s port, 5174. Every browser-side POST (signup, login,
+   demo) from a page served at :5174 was silently blocked by CORS; the frontend's
+   generic error handling (`err instanceof ApiError ? err.message : "..."`) masked it
+   as "Couldn't start a demo session." rather than surfacing the real cause. Fixed by
+   setting `CORS_ORIGINS: http://localhost:5174` on `api-test`. Also proactively set
+   `COOKIE_SECURE: "false"` on the same service — the identical plain-HTTP-vs-Secure-
+   cookie issue from ADR 0002 §5, this time for a real browser instead of `httpx`'s
+   test client, which would have silently broken session persistence in e2e the same
+   way it broke it in production dev testing before that fix.
+
+None of these three were caused by this phase's application code — they were latent
+bugs in test infrastructure nobody had run end-to-end before. Each was root-caused by
+directly comparing "what does `curl`/`docker exec cat` show" against "what does the
+browser actually receive," the same debugging discipline ADR 0001 and ADR 0002 already
+established for this project.

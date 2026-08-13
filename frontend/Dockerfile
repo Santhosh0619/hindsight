@@ -2,6 +2,10 @@
 FROM node:20-slim AS base
 WORKDIR /app
 ENV NODE_ENV=development
+# curl is needed by docker-compose.test.yml's web-test healthcheck (and useful for
+# manual debugging) -- node:20-slim doesn't include it by default.
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
 FROM base AS deps
@@ -21,6 +25,7 @@ RUN npm run build
 
 # ── Production (nginx) ────────────────────────────────────────────────────────
 FROM nginx:alpine AS production
+RUN apk add --no-cache curl
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
