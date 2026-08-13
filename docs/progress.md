@@ -396,7 +396,7 @@ Full detail on all seven findings and their fixes: ADR 0004 §2-7.
   rewrite the already-CRLF working tree (adding the attributes file alone didn't
   retroactively fix files already on disk). See ADR 0004 §8.
 
-## Phase 5 — Ingestion Pipeline & Job Queue — done, PR open
+## Phase 5 — Ingestion Pipeline & Job Queue — done, merged ([PR #6](https://github.com/Santhosh0619/hindsight/pull/6))
 
 Target checkpoint (Master-Prompt.md): paste a postmortem, watch status go
 `pending → processing → indexed`, confirm chunks and 384-dim embeddings exist, and
@@ -467,7 +467,86 @@ structured events.
 Full detail on both findings and the design rationale behind the queue's reclaim/
 backoff semantics: ADR 0005.
 
-## Phase 6 — Extraction Agents (Pydantic AI) — pending
+## Phase 6 — Extraction Agents (Pydantic AI) — done, PR open
+
+Target checkpoint (Master-Prompt.md): ingest 3 postmortems; `postmortem_facts`,
+`postmortem_services`, and `postmortem_failure_modes` are populated; a deliberately
+injected instruction inside a test postmortem does not change extraction behavior.
+
+No real LLM key is configured this build session (Santhosh's explicit choice: build
+and verify against mocks, add a real key and verify live generation himself later —
+see Phase 18's standing reminder to ask before screenshot/recording capture). Verified
+two ways: 17 new automated backend tests (up from 82 going into this phase — 4 in
+`test_llm_router.py`, 4 in `test_extraction.py`, 4 in `test_extraction_service.py`, 5
+in `test_cache.py`) run against the real dev Postgres and `pydantic-ai`'s real
+`TestModel`/`FunctionModel` offline-testing utilities (not hand-rolled fakes — the
+exact `Agent(model, output_type=...)` code path a real provider call would take).
+**Also** verified against the real `docker-compose.yml` `api`+`worker` containers:
+posted a postmortem via curl, watched it ingest to `indexed`, watched the worker
+automatically claim the chained `extract_postmortem` job, confirmed only Ollama was
+attempted once a real config bug (below) was fixed, and confirmed the job failed
+cleanly with `"All LLM providers unavailable"` and dead-lettered after retrying.
+
+| Step | Status | Notes |
+|---|---|---|
+| 1. BRANCH | done | `feat/extraction-agents`, created from `main` after Phase 5 merged |
+| 2. READ | done | |
+| 3. EXPLORE | done | Verified `pydantic-ai` 2.29.0's actual API directly (re-checked past Phase 0's 2.27.1 findings — `output_type`/`.output` still current, `.usage` is a property not a callable), confirmed `groq` needed as an explicit new dependency (pydantic-ai's Google support ships bundled by default, Groq does not), confirmed `SemanticCache`/`FailureMode`/etc. models already exist from Phase 1 |
+| 4. DOCUMENT | done | `docs/modules/phase-6-extraction-agents/{PRD,FRD,NFR}.md` committed before any code |
+| 5. CODE-BE | done | `app/services/llm/{provider,gemini,groq,ollama,router,cache}.py`, `app/services/extraction/{taxonomy,prompting,facts_agent,failure_mode_agent,service_linker_agent}.py`, `app/services/extraction_service.py`, `app/workers/handlers/extract_postmortem.py`, `ingest_postmortem.py` modified to chain extraction |
+| 6. TEST-BE | done | `ruff`, `mypy --strict`, `pytest` (99/99, 3 consecutive stable runs) all clean, run inside the `api` container |
+| 7. REVIEW-BE | **APPROVED** | First pass: 0 blocking / 0 warnings / 0 notes — clean on the first review, a first for this project. See ADR 0006. |
+| 8-10 | n/a | Backend-only phase per Master-Prompt.md's phase breakdown |
+| 11. TEST-E2E | n/a | No UI this phase to exercise — same rationale as Phases 4-5 |
+| 12. PUSH | pending | |
+| 13. PR | pending | |
+| 14. MERGE | pending | |
+
+### Bugs found only by running real code against this repo's actual `.env`
+
+- **`.env`/`.env.example` had inline comments silently becoming literal config
+  values.** `LLM_API_KEY=                    # Gemini: free key at...` — `python-dotenv`
+  strips a trailing `#` comment when there's real content before it, but not when the
+  value is blank, so the whole comment became the literal field value. Every earlier
+  phase declared these `Settings` fields but never read them, so this was completely
+  inert until this phase's `build_router` became the first code to check
+  `if settings.llm_api_key:`. Would have hit every future clone that copies
+  `.env.example` and leaves the LLM keys blank — the documented, expected "no key"
+  path, not an edge case. Fixed by moving every such comment to its own line. See
+  ADR 0006 §3.
+
+### Bugs found only by trying to run the suite repeatedly against a shared dev database
+
+- **Ingestion's new auto-chained `extract_postmortem` job leaked into other tests.**
+  Any test that ingests a postmortem without caring about extraction (most of
+  `test_postmortems.py`, two tests in `test_extraction_service.py`) left the
+  auto-enqueued job sitting `queued` forever. After enough repeated local runs, this
+  accumulated past a `claim(..., limit=50)` call's window — a brand-new job lost to 50+
+  older orphaned ones (`claim` orders oldest-first). Fixed by draining and discarding
+  the side-effect job in both files' helpers; the one test that needs a real job
+  enqueues its own instead of relying on the auto-chained one. Same underlying lesson
+  as Phase 5's ADR 0005 §6, applied to the new job kind this phase introduced. See
+  ADR 0006 §5.
+
+### Design decisions worth noting
+
+- The 12-family failure-mode taxonomy is this phase's own design (plan.md/
+  Master-Prompt.md reference "the fixed 12-family taxonomy" without naming it) — see
+  ADR 0006 §1 for the full list and rationale.
+- The semantic cache (`app/services/llm/cache.py`) is built and unit-tested this phase
+  but deliberately **not** wired into the extraction agents — its first real consumer
+  is Phase 8's brief generation, where a near-duplicate *incident* reusing a cached
+  brief is plan.md's actual documented use case, unlike per-postmortem extraction
+  where a near-duplicate prompt returning a different postmortem's facts would be
+  wrong. See ADR 0006 §2.
+- Agent tests use `pydantic-ai`'s real `TestModel`/`FunctionModel`, not hand-rolled
+  fakes — `FunctionModel` specifically lets a test inspect the actual prompt an agent
+  constructed, which is what makes the injection-defense test (FR-08) prove the
+  untrusted-data delimiting actually happened rather than merely that the pipeline
+  "ran." See ADR 0006 §4.
+
+Full detail on all findings and design rationale: ADR 0006.
+
 ## Phase 7 — Hybrid Retrieval — pending
 ## Phase 8 — LangGraph Agent Pipeline — pending
 ## Phase 9 — Incidents API + The Money Screen — pending

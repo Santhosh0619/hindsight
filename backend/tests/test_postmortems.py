@@ -24,6 +24,15 @@ async def _run_pending_ingestion_jobs(db: AsyncSession) -> None:
         await handle_ingest_postmortem(db, job)
         await queue.complete(db, job=job)
 
+    # Ingestion auto-enqueues an extract_postmortem job as a side effect (Phase 6).
+    # This file doesn't test extraction -- draining and discarding it here keeps it
+    # from sitting as a permanent orphan that a later, unrelated test could pick up.
+    extract_jobs = await queue.claim(
+        db, worker_id="test-worker", kinds=["extract_postmortem"], limit=50
+    )
+    for job in extract_jobs:
+        await queue.complete(db, job=job)
+
 
 async def test_create_postmortem_starts_pending(client: AsyncClient) -> None:
     owner = await signup(client)

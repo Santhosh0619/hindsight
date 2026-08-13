@@ -72,3 +72,34 @@ async def signup(
 
 def auth_headers(access_token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {access_token}"}
+
+
+class FakeModelProvider:
+    """Wraps a pydantic-ai Model (TestModel/FunctionModel) as an LLMProvider, so
+    extraction-agent tests exercise the real Agent(model, output_type=...) code path
+    without a real network call -- no LLM key is configured for this build session."""
+
+    def __init__(self, model: object) -> None:
+        self.model_name = "test"
+        self._model = model
+
+    async def complete(self, prompt: str, *, system: str) -> Any:
+        from pydantic_ai import Agent
+
+        from app.services.llm.provider import LLMResponse
+
+        agent = Agent(self._model, system_prompt=system)  # type: ignore[arg-type]
+        result = await agent.run(prompt)
+        return LLMResponse(
+            text=str(result.output),
+            tokens_in=result.usage.input_tokens,
+            tokens_out=result.usage.output_tokens,
+            model=self.model_name,
+        )
+
+    async def structured(self, prompt: str, *, system: str, result_type: Any) -> Any:
+        from pydantic_ai import Agent
+
+        agent = Agent(self._model, output_type=result_type, system_prompt=system)  # type: ignore[arg-type]
+        result = await agent.run(prompt)
+        return result.output

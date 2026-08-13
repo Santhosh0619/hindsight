@@ -11,6 +11,7 @@ from app.core.logging import configure_logging, get_logger
 from app.db.session import dispose_engine, get_session_factory
 from app.models.job import Job, JobStatus
 from app.workers import queue
+from app.workers.handlers.extract_postmortem import handle_extract_postmortem
 from app.workers.handlers.ingest_postmortem import handle_ingest_postmortem
 
 logger = get_logger(__name__)
@@ -21,7 +22,10 @@ MAX_CONCURRENT_JOBS = 5
 
 JobHandler = Callable[[AsyncSession, Job], Awaitable[None]]
 
-_HANDLERS: dict[str, JobHandler] = {"ingest_postmortem": handle_ingest_postmortem}
+_HANDLERS: dict[str, JobHandler] = {
+    "ingest_postmortem": handle_ingest_postmortem,
+    "extract_postmortem": handle_extract_postmortem,
+}
 
 
 class Worker:

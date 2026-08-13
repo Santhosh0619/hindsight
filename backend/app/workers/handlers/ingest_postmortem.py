@@ -11,6 +11,7 @@ from app.services.ingestion.embed import embed
 from app.services.ingestion.index import index_postmortem
 from app.services.ingestion.redact import redact
 from app.services.ingestion.screen import screen
+from app.workers import queue
 
 logger = get_logger(__name__)
 
@@ -35,6 +36,12 @@ async def handle_ingest_postmortem(db: AsyncSession, job: Job) -> None:
         postmortem.redacted_text = redacted
         postmortem.injection_flagged = injection_flagged
         await index_postmortem(db, postmortem=postmortem, chunks=spans, embeddings=embeddings)
+        await queue.enqueue(
+            db,
+            workspace_id=postmortem.workspace_id,
+            kind="extract_postmortem",
+            payload={"postmortem_id": str(postmortem_id)},
+        )
         logger.info(
             "postmortem_ingested",
             postmortem_id=str(postmortem_id),
