@@ -46,6 +46,18 @@ async def _create_and_ingest_postmortem(
     for job in jobs:
         await handle_ingest_postmortem(db, job)
         await queue.complete(db, job=job)
+
+    # Ingestion auto-enqueues an extract_postmortem job as a side effect. Most callers
+    # here test extraction via run_extraction() directly and never touch the queue, so
+    # that auto-enqueued job would otherwise sit as a permanent orphan -- draining and
+    # discarding it keeps this file from leaking jobs that a later, unrelated test
+    # (matching on kind + payload) could otherwise pick up by accident.
+    extract_jobs = await queue.claim(
+        db, worker_id="test-worker", kinds=["extract_postmortem"], limit=50
+    )
+    for job in extract_jobs:
+        await queue.complete(db, job=job)
+
     return postmortem_id
 
 
@@ -232,8 +244,15 @@ async def test_handle_extract_postmortem_fails_cleanly_with_no_llm_configured(
         client, db, token=token, workspace_id=workspace_id, raw_text="Summary:\nSomething broke.\n"
     )
 
-    jobs = await queue.claim(db, worker_id="test-worker", kinds=["extract_postmortem"], limit=50)
-    [job] = [j for j in jobs if j.payload["postmortem_id"] == postmortem_id]
+    # Enqueue a dedicated job for this test rather than relying on the one ingestion
+    # auto-enqueues (the helper above already drains and discards that one) -- avoids
+    # any ambiguity about which queued extract_postmortem job belongs to this test.
+    job = await queue.enqueue(
+        db,
+        workspace_id=uuid.UUID(workspace_id),
+        kind="extract_postmortem",
+        payload={"postmortem_id": postmortem_id},
+    )
 
     with pytest.raises(LLMUnavailableError):
         await handle_extract_postmortem(db, job)
