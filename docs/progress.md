@@ -5,6 +5,10 @@ through the Step 1–14 module workflow defined in `CLAUDE.md`.
 
 Legend: `done` · `in-progress` · `blocked` · `pending`
 
+**Standing TODO (Phase 18, item 13):** capture full raw screenshots + a screen
+recording of the finished app into local gitignored `/marketing/` for Santhosh's own
+LinkedIn post — see Master-Prompt.md's Phase 18 checklist. Not done until Phase 18.
+
 ## Phase 0 — Rules and Pre-Flight Verification — done
 
 - `pydantic-ai`, LangGraph Postgres checkpointer, Gemini free-tier model ID, and
@@ -158,7 +162,7 @@ space (down to 83% / 34GB free) and all prior containers for the project were
 removed as part of that cleanup; Docker Desktop was restarted and `db`+`api`
 were rebuilt and recreated from scratch successfully.
 
-## Phase 2 — Auth & Workspaces — done, PR open
+## Phase 2 — Auth & Workspaces — done, merged ([PR #3](https://github.com/Santhosh0619/hindsight/pull/3))
 
 Target checkpoint (Master-Prompt.md): full auth flow works via curl; cross-tenant test
 passes.
@@ -222,7 +226,100 @@ writes + pagination all verified both manually (`curl`) and by the automated sui
   with "Future attached to a different loop." Fixed with an autouse fixture that
   disposes the engine after every test.
 
-## Phase 3 — Frontend Foundation — pending
+## Phase 3 — Frontend Foundation — done, PR open
+
+Target checkpoint (Master-Prompt.md): signup → onboarding → empty dashboard, all
+through the browser. Refresh the page and stay logged in. A viewer sees no write
+buttons.
+
+Verified live in a real browser (Playwright against the running `db`+`api`+`web`
+containers, not just unit tests): signup → onboarding → dashboard shell; hard reload
+at `/dashboard` and again at `/settings` both kept the session; direct visit to
+`/incidents` while logged out redirected to `/login`; logout redirected to `/login`
+and cleared the session. **Also** verified by a real automated Playwright suite (8
+tests, 2 spec files) against the fully isolated `docker-compose.test.yml` stack — see
+Step 11 below.
+
+| Step | Status | Notes |
+|---|---|---|
+| 1. BRANCH | done | `feat/frontend-foundation`, created from `main` after Phase 2 merged |
+| 2. READ | done | |
+| 3. EXPLORE | done | Reviewed the setup-scaffolded `frontend/{Dockerfile,nginx.conf,tsconfig.json,.prettierrc}` and Phase 2's response schemas before writing docs |
+| 4. DOCUMENT | done | `docs/modules/phase-3-frontend-foundation/{PRD,FRD,NFR}.md` committed before any code |
+| 5. CODE-FE | done | Vite + React 18 + TS strict + Tailwind v4 + shadcn-style primitives + React Router v7 + React Query; `lib/api.ts` (401-retry + concurrent-refresh dedup), `lib/auth.tsx`, `AppShell`, F1–F3 pages, stub routes for F4–F14 |
+| 6. TEST-FE | done | `tsc --noEmit`, `eslint --max-warnings 0`, `prettier --check`, `vitest` (14 tests), `vite build` all clean, run inside the `web` container |
+| 7. REVIEW-FE | **APPROVED** | First pass: 1 BLOCKING (`useRequireRole` built but never wired into `AppShell` — FR-07's viewer gating had zero observable effect) + 2 NOTEs (stale ADR filename reference, F6's deliberate sidebar omission undocumented). Fixed (wired the gate, added a component test, fixed both notes); see ADR 0003 §7. Re-review verified the fix live (unit + e2e) → 0 blocking / 0 warnings / 0 notes. |
+| 8-10 | n/a | Frontend-only phase, backend steps don't apply |
+| 11. TEST-E2E | **done** | Partially unblocked ADR 0001 §4's deferral — auth/workspace/frontend features don't need Phase 11's seed data. `e2e/tests/auth-frontend.spec.ts` (7 tests) + `e2e/tests/rbac-shell.spec.ts` (1 test), run against the real isolated `docker-compose.test.yml` stack, 8/8 passing, stable across repeat runs. Surfaced three real infrastructure bugs in the process — see ADR 0003 §8-9. Catalog/incident e2e stays deferred until Phase 11. |
+| 12. PUSH | pending | |
+| 13. PR | pending | |
+| 14. MERGE | pending | |
+
+### Bugs found only by an actual browser walkthrough (not by tsc/eslint/vitest alone)
+
+- **A hard reload logged the user out.** `AuthProvider`'s boot-time refresh effect was
+  double-invoked by React 18 StrictMode, firing two near-simultaneous
+  `POST /auth/refresh` calls. Phase 2's refresh-token reuse detection saw the second
+  call's already-rotated token as a replay and revoked the whole session — a real race
+  (two browser tabs reloading close together would hit it in production too, not just
+  in dev). Fixed with a `useRef` guard so the boot-time refresh logic runs once per app
+  lifetime regardless of how many times the effect fires; added a regression test that
+  renders under `<React.StrictMode>` and asserts exactly one refresh call. See
+  ADR 0003 §2.
+- **Edited files weren't reflected by the running dev server.** Docker Desktop's
+  Windows-host bind mount (`./frontend/src` lives on `D:`, not inside WSL2's native
+  filesystem) doesn't reliably propagate inotify events, so Vite's default watcher
+  kept serving a stale transform cache even though the container's own filesystem view
+  of the file was correct. Fixed with `server.watch.usePolling = true` in
+  `vite.config.ts`. See ADR 0003 §3.
+- **`npm audit` on the initially-planned dependency versions found a critical vitest
+  RCE-class vulnerability and CVEs in React Router 6.0.0–7.17.0** — resolved by
+  adopting current majors (`vite@8`, `vitest@4`, `react-router-dom@7.18.2`) instead of
+  the versions plan.md's tech-stack table would have implied; zero vulnerabilities on
+  what's actually pinned. See ADR 0003 §1.
+- **An FRD draft had Onboarding calling `POST /workspaces`** for "Start empty" — but
+  signup already creates the user's personal workspace, so that would have left every
+  user with two. Caught while implementing, fixed before it ever shipped: "Start
+  empty" just proceeds with the existing workspace. See ADR 0003 §6.
+
+### Bugs found only by getting real automated e2e running (not by the manual walkthrough either)
+
+- **FR-07's viewer gating was entirely dead code.** `useRequireRole` existed but
+  `AppShell` never called it, so a `viewer` saw every write-triggering nav entry same
+  as an owner — the manual browser walkthrough never happened to check with a
+  non-owner account, and no automated check catches unused-but-exported code. Caught
+  by the code-reviewer sub-agent reading the FRD, not by any tool. Fixed by gating the
+  Settings entry; see ADR 0003 §7.
+- **`web-test` was permanently unhealthy** — its healthcheck runs `curl`, which
+  `node:20-slim` doesn't include. Vite was serving correctly the entire time; the
+  healthcheck itself was broken. Fixed in `frontend/Dockerfile` (both the dev and the
+  nginx production stage, which had the same latent bug). See ADR 0003 §9.
+- **The local `.env` pointed e2e at the regular dev containers, not the isolated test
+  stack** (`:5173`/`:8000` instead of `:5174`/`:8001`) — every e2e run silently
+  exercised the dev database until caught via `page.evaluate(() =>
+  window.location.href)` returning the wrong port. `.env.example` had the correct
+  values the whole time. See ADR 0003 §9.
+- **`api-test` had no `CORS_ORIGINS` override**, so browser-side POSTs (signup/login/
+  demo) from `web-test`'s origin were silently blocked by CORS, surfacing only as a
+  generic "Couldn't start a demo session." Also proactively fixed the same
+  plain-HTTP-vs-Secure-cookie issue from ADR 0002 §5 for `api-test`. See ADR 0003 §9.
+- **`pre-push`'s frontend section had never once run** (guarded by
+  `frontend/package.json` existing, which it didn't until this phase) and had a real
+  bug the moment it finally did: `tsc --noEmit --quiet` — `--quiet` isn't a `tsc`
+  flag. Fixed the same way as Phase 1's backend-section fix: runs inside the `web`
+  container now, and expanded to the full quality bar (`tsc`, `eslint`, `prettier`,
+  `vitest`, `build`) per `test-runner.md`. See ADR 0003 §10.
+
+### Design pass (user-requested mid-phase)
+
+The initial implementation applied plan.md's "calm and dense" direction uniformly,
+including the landing/auth screens, and it read as flat rather than calm. Split the
+design language: the public surface (Landing/Login/Signup/Onboarding) got a CSS-only
+tech-grid/glow background, a gradient headline, and glass-morphic auth cards; the
+`AppShell` interior stayed exactly as restrained as originally planned. See
+ADR 0003 §5, and the addendum notes added to `plan.md` §6 and `Master-Prompt.md`'s
+Phase 3 design-direction bullet.
+
 ## Phase 4 — Service Catalog & Graph Traversal — pending
 ## Phase 5 — Ingestion Pipeline & Job Queue — pending
 ## Phase 6 — Extraction Agents (Pydantic AI) — pending
