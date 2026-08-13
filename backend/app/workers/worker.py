@@ -61,6 +61,12 @@ class Worker:
                 continue
 
             for job in jobs:
+                logger.info(
+                    "job_claimed",
+                    job_id=str(job.id),
+                    kind=job.kind,
+                    workspace_id=str(job.workspace_id),
+                )
                 task = asyncio.create_task(self._run_job(job.id, job.kind))
                 self._in_flight.add(task)
                 task.add_done_callback(self._in_flight.discard)

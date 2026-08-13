@@ -1,3 +1,4 @@
+import time
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +25,7 @@ async def handle_ingest_postmortem(db: AsyncSession, job: Job) -> None:
     postmortem.status = PostmortemStatus.PROCESSING
     await db.commit()
 
+    start = time.monotonic()
     try:
         redacted = redact(postmortem.raw_text)
         injection_flagged = screen(redacted)
@@ -38,6 +40,7 @@ async def handle_ingest_postmortem(db: AsyncSession, job: Job) -> None:
             postmortem_id=str(postmortem_id),
             chunk_count=len(spans),
             injection_flagged=injection_flagged,
+            duration_ms=int((time.monotonic() - start) * 1000),
         )
     except Exception as exc:
         await db.rollback()
