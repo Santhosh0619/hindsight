@@ -435,3 +435,71 @@ mocks/simulation" discipline every prior phase's ADRs describe (a live Postgres 
 recursive CTEs, a real browser for cookie semantics) — a background worker process is
 exactly the kind of surface where "the tests pass" and "the actual deployed thing
 works" can diverge.
+
+---
+
+## Phase 6 — Extraction Agents (Pydantic AI)
+
+**Q: How do you test an LLM-calling agent without a real API key or a real model?**
+
+A: `pydantic-ai` ships `TestModel` and `FunctionModel` specifically for this, and both
+exercise the exact same `Agent(model, output_type=...)` code path a real provider
+would — only the `Model` implementation underneath changes, not the agent-construction
+logic being tested. `TestModel(custom_output_args={...})` returns deterministic,
+schema-valid typed output without a network call, good for "does this agent return the
+right shape" tests. `FunctionModel` goes further: it hands a test-supplied callback the
+actual list of messages the agent constructed, which is what makes the
+prompt-injection-defense test meaningful rather than cosmetic — the test asserts the
+untrusted-data notice is present and that an injected instruction phrase appears only
+inside the delimited chunk block of the *user* prompt, never promoted into the
+*system* prompt where a naive agent framework might treat it as a real instruction.
+A `TestModel`-only test could pass even if that delimiting silently broke; inspecting
+the actual constructed prompt can't make that mistake.
+
+**Q: The fact-extraction agent could return a fact citing a source that doesn't exist.
+How do you stop that from becoming a false citation in the product?**
+
+A: A deterministic Python filter, not a second LLM call asking the model to check
+itself. `extraction_service.py`'s `run_extraction` loads the postmortem's actual chunk
+ids before calling any agent, and after the facts agent returns, drops any `FactItem`
+whose `chunk_id` isn't in that real set — before the row is ever persisted to
+`postmortem_facts`. The same pattern applies to the service-linker agent: it's given
+the workspace's real service names as context, but nothing stops a model from
+inventing one anyway, so `extraction_service.py` resolves every returned name against
+`catalog_service.list_services` and silently drops names that don't match. Both guards
+are cheap, fully deterministic, and unit-tested independent of any particular model's
+actual behavior — the model doesn't have to be trustworthy, because nothing it
+returns reaches the database without first surviving a check that doesn't care what
+the model "intended."
+
+**Q: What happens when no LLM provider is reachable — not "the model returned a bad
+answer," but genuinely nothing to call?**
+
+A: The router's fallback chain (Gemini → Groq → Ollama, matching plan.md's documented
+degradation ladder) always includes Ollama last regardless of whether any key is
+configured, since it's the documented zero-key local fallback. When nothing is
+actually configured or reachable — this build's real state for most of its life, by
+design — every provider in the chain fails, and the router raises the existing
+`LLMUnavailableError` rather than returning a placeholder or an empty-but-successful
+result. The `extract_postmortem` job handler doesn't catch that exception; it
+propagates to the worker's ordinary retry/backoff/dead-letter path, the exact same
+mechanism every other job kind uses. Verified live against the real worker container,
+not just asserted in a test: the job retries a few times with backoff, dead-letters,
+and `jobs.last_error` reads "All LLM providers unavailable" — inspectable by a human,
+not a silent failure and not a crashed worker process.
+
+**Q: A committed `.env.example` had a real bug that would hit every fresh clone. What
+was it, and why didn't Phases 1-5 catch it?**
+
+A: `LLM_API_KEY=` (and `LLM_MODEL=`, `GROQ_API_KEY=`) had an inline `# comment`
+trailing the empty value on the same line. `python-dotenv` strips a trailing comment
+correctly when there's real content before the `#` (`LLM_PROVIDER=gemini # comment`
+parses to the clean string `"gemini"`), but when the value portion is blank, it
+doesn't — the whole remainder of the line, comment included, becomes the literal
+field value. Every earlier phase declared these `Settings` fields but never actually
+*read* them in a code path, so the bug was completely inert until this phase's
+`build_router` became the first code to check `if settings.llm_api_key:` — at which
+point a supposedly-unset key evaluated truthy, and the router tried to call Gemini
+with a "model name" that was literally the comment text. Fixed by moving every such
+comment to its own line above the bare `KEY=` — the general rule now: never put an
+inline comment on a line whose value is meant to be blank.
