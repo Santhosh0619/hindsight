@@ -320,7 +320,82 @@ tech-grid/glow background, a gradient headline, and glass-morphic auth cards; th
 ADR 0003 §5, and the addendum notes added to `plan.md` §6 and `Master-Prompt.md`'s
 Phase 3 design-direction bullet.
 
-## Phase 4 — Service Catalog & Graph Traversal — pending
+## Phase 4 — Service Catalog & Graph Traversal — done, PR open
+
+Target checkpoint (Master-Prompt.md): create teams/services/edges, query blast radius
+for a service, import a catalog in bulk — all backend, no UI this phase (the Service
+Map that consumes this is Phase 10).
+
+Verified with 52 automated backend tests (up from 39 going into this phase — 10 in
+`test_catalog.py`, 6 in `test_graph.py`) run against the real dev Postgres container,
+not mocked: CRUD + RBAC + cross-tenant isolation + self-edge rejection + duplicate-edge
+conflict + bulk import (including rollback-on-unresolvable-name) for the catalog; linear
+chain / diamond / cycle / depth cap / hard-vs-soft criticality ordering / exact-value
+scoring for the graph traversal.
+
+| Step | Status | Notes |
+|---|---|---|
+| 1. BRANCH | done | `feat/service-catalog`, created from `main` after Phase 3 merged |
+| 2. READ | done | |
+| 3. EXPLORE | done | Reviewed Phase 1's `Team`/`Service`/`ServiceEdge` models and `values_callable` enum pattern, Phase 2's `get_current_workspace`/`require_role` dependencies, before writing docs |
+| 4. DOCUMENT | done | `docs/modules/phase-4-service-catalog/{PRD,FRD,NFR}.md` committed before any code |
+| 5. CODE-BE | done | `GraphStore` protocol + `PostgresGraphStore` recursive-CTE implementation, `catalog_service` (teams/services/edges CRUD + bulk import), `api/v1/catalog.py` router |
+| 6. TEST-BE | done | `ruff`, `mypy --strict`, `pytest` (52/52) all clean, run inside the `api` container |
+| 7. REVIEW-BE | **APPROVED** | First pass: 3 BLOCKING + 2 WARNING + 2 NOTE — see below. Fixed all 7; re-review verified live (fresh checklist pass, not just re-checking the same 7 items) → 0 blocking / 0 warnings / 0 notes. |
+| 8-10 | n/a | Backend-only phase per Master-Prompt.md's phase breakdown |
+| 11. TEST-E2E | n/a | No UI this phase to exercise — the Service Map that consumes `GET /graph` and blast-radius is Phase 10, which owns this phase's e2e coverage |
+| 12. PUSH | pending | |
+| 13. PR | pending | |
+| 14. MERGE | pending | |
+
+### Bugs found only by running real tests against a live Postgres (not by ruff/mypy)
+
+- **A bind parameter immediately followed by `::` was never substituted at all.**
+  `WHERE s.id = ANY(:start_ids::uuid[])` compiled with `:start_ids::uuid[]` left
+  completely untouched while other params correctly became `$1`/`$2` — SQLAlchemy's
+  textual-SQL parser treats a colon followed immediately by another colon as not a bind
+  parameter, to avoid colliding with the `::` cast operator. Fixed with a single space
+  (`:start_ids ::uuid[]`), semantically identical to Postgres. See ADR 0004 §3.
+- **`ServiceTier`'s Postgres label is the member name (`"TIER_1"`), not its int value**
+  — the one enum in this codebase that doesn't use the `values_callable` helper (a
+  deliberate Phase 1 choice). The blast-radius tier-weight lookup is keyed by those
+  strings, caught proactively by re-reading Phase 1's own ADR before ever running the
+  code against a real database. See ADR 0004 §2.
+
+### Bugs found only by the code-reviewer sub-agent (not by any tool)
+
+- **`GET /services` silently dropped the documented `tier` filter** — only `team_id`
+  was wired up, even though the service layer already supported filtering by tier.
+- **Blast-radius `path` was typed `list[uuid.UUID]` instead of the FRD's documented
+  `list[ServiceOut]`** — fixed with a batch `get_services_by_ids` lookup to resolve an
+  entire response's worth of path hops in one query, avoiding an N+1.
+- **Catalog import's `team_name` resolution only checked the current payload**, not
+  pre-existing workspace teams, and silently defaulted to `team_id = None` on an
+  unresolved name instead of rolling back like every other name-resolution path in the
+  same function does.
+- **Blast-radius scoring averaged edge weights along a path instead of summing them**,
+  matching the FRD's documented formula only by coincidence for one-hop paths — the
+  original test suite only ever exercised depth-1 paths, so this passed clean until the
+  reviewer checked the code against the FRD's summation notation directly. The fix
+  shipped with a new test asserting an exact score value on a two-hop mixed-criticality
+  path, not just score ordering.
+- Two NOTE-level defense-in-depth findings also fixed: the blast-radius tier lookup
+  wasn't workspace-scoped, and `create_service`/`update_service` didn't validate
+  `team_id` against the workspace the way `create_edge` already validates both of its
+  endpoints.
+
+Full detail on all seven findings and their fixes: ADR 0004 §2-7.
+
+### Infra bug found only by trying to push (unrelated to this phase's own code)
+
+- **`git push` was blocked by a frontend-wide prettier failure on a backend-only
+  branch.** This machine's `core.autocrlf=true` checks every file out as CRLF, and
+  `frontend/.prettierrc`'s `endOfLine: "lf"` flagged all 42 frontend files as
+  unformatted purely from that, unrelated to any real content change. Fixed with a
+  repo-root `.gitattributes` pinning `eol=lf`, plus a forced re-checkout to actually
+  rewrite the already-CRLF working tree (adding the attributes file alone didn't
+  retroactively fix files already on disk). See ADR 0004 §8.
+
 ## Phase 5 — Ingestion Pipeline & Job Queue — pending
 ## Phase 6 — Extraction Agents (Pydantic AI) — pending
 ## Phase 7 — Hybrid Retrieval — pending
