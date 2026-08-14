@@ -647,7 +647,7 @@ cross-workspace isolation, and the unauthenticated redirect.
 
 Full detail on all findings and design rationale: ADR 0007.
 
-## Phase 8 — LangGraph Agent Pipeline — done, PR pending
+## Phase 8 — LangGraph Agent Pipeline — done, PR open ([PR #9](https://github.com/Santhosh0619/hindsight/pull/9))
 
 Target checkpoint (Master-Prompt.md): feed a seeded alert through the compiled graph in
 a script; all six nodes fire in order; force a low score and observe exactly one
@@ -677,9 +677,9 @@ against a real graph run, which is what caught this phase's one genuine concurre
 | 7. REVIEW-BE | **APPROVED** | First pass: 3 BLOCKING + 3 WARNING + 1 NOTE — see below. Fixed all 7; re-review → APPROVED, 0/0/0, independently re-verified (not just re-checking the same 7 items). |
 | 8-10 | n/a | No frontend deliverable this phase per its own PRD's Out of Scope — F5/F6 are Phase 9 |
 | 11. TEST-E2E | n/a | No UI this phase to exercise — same rationale as Phases 4-6 |
-| 12. PUSH | pending | |
-| 13. PR | pending | |
-| 14. MERGE | pending | |
+| 12. PUSH | done | `feat/agent-pipeline` pushed; pre-push hook (ruff, mypy, pytest, tsc, eslint, prettier, vitest, build, all in Docker) passed |
+| 13. PR | done | [#9](https://github.com/Santhosh0619/hindsight/pull/9) opened against `main` |
+| 14. MERGE | pending | awaiting explicit go-ahead |
 
 ### The one bug found only by running real code, not by design review
 
