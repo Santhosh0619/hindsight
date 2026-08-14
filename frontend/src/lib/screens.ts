@@ -16,8 +16,8 @@ export interface ScreenDef {
 
 export const SCREENS: ScreenDef[] = [
   { path: "/dashboard", label: "Dashboard", phase: 10 },
-  { path: "/incidents/new", label: "New Incident", phase: 9 },
-  { path: "/incidents", label: "Incidents", phase: 9 },
+  { path: "/incidents/new", label: "New Incident", phase: 9, implemented: true },
+  { path: "/incidents", label: "Incidents", phase: 9, implemented: true },
   { path: "/knowledge-base", label: "Knowledge Base", phase: 10 },
   { path: "/service-map", label: "Service Map", phase: 10 },
   { path: "/search", label: "Search", phase: 7, implemented: true },

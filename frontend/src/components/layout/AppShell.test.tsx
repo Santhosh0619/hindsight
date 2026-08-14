@@ -45,6 +45,7 @@ describe("AppShell — FR-07 role gating", () => {
     renderShell();
 
     expect(screen.queryByRole("link", { name: "Settings" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "New Incident" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
   });
 
@@ -68,5 +69,6 @@ describe("AppShell — FR-07 role gating", () => {
     renderShell();
 
     expect(screen.getByRole("link", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "New Incident" })).toBeInTheDocument();
   });
 });

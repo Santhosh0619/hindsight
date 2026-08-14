@@ -18,13 +18,16 @@ import { SCREENS } from "@/lib/screens";
 export function AppShell(): React.JSX.Element {
   const { user, memberships, currentMembership, setCurrentWorkspace, logout } = useAuth();
   const navigate = useNavigate();
-  // FR-07: Settings (F13) is entirely a write/admin surface — members & roles, API
-  // keys, LLM provider selection, workspace deletion (plan.md §6). It's the one
-  // write-triggering entry point that actually exists in the shell this phase, so
-  // it's the one gated; every other write action described in FR-07 doesn't have UI
-  // yet and will be gated in the phase that builds it.
-  const canSeeSettings = useRequireRole("owner", "responder");
-  const visibleScreens = SCREENS.filter((screen) => screen.path !== "/settings" || canSeeSettings);
+  // FR-07: Settings (F13) and New Incident (F5) are both write/admin surfaces --
+  // Settings gates members & roles, API keys, LLM provider selection, workspace
+  // deletion (plan.md §6); New Incident triggers a real LLM-costing brief generation
+  // run. Both are hidden from viewers here, matching IncidentDetail's own
+  // useRequireRole gate on its Generate/Regenerate brief button. Every other write
+  // action described in FR-07 doesn't have UI yet and will be gated in the phase
+  // that builds it.
+  const canWrite = useRequireRole("owner", "responder");
+  const GATED_PATHS = new Set(["/settings", "/incidents/new"]);
+  const visibleScreens = SCREENS.filter((screen) => !GATED_PATHS.has(screen.path) || canWrite);
 
   const handleLogout = async (): Promise<void> => {
     await logout();
