@@ -78,7 +78,10 @@ async def search_graph(
     links_result = await db.execute(
         select(PostmortemService, Postmortem)
         .join(Postmortem, Postmortem.id == PostmortemService.postmortem_id)
-        .where(PostmortemService.service_id.in_(candidates.keys()))
+        .where(
+            PostmortemService.service_id.in_(candidates.keys()),
+            Postmortem.workspace_id == workspace_id,
+        )
     )
 
     best_by_postmortem: dict[uuid.UUID, GraphHit] = {}

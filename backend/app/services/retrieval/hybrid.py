@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.db.session import get_session_factory
 from app.models.postmortem import Postmortem, PostmortemChunk
 from app.schemas.postmortem import PostmortemOut
@@ -24,6 +25,8 @@ from app.services.retrieval.fusion import reciprocal_rank_fusion
 from app.services.retrieval.graph import GraphHit, search_graph
 from app.services.retrieval.keyword import KeywordHit, search_keyword
 from app.services.retrieval.vector import VectorHit, search_vector
+
+logger = get_logger(__name__)
 
 
 class _HasPostmortemId(Protocol):
@@ -120,10 +123,14 @@ async def hybrid_search(
     if graph_best:
         ranked_lists["graph"] = _ranked_ids(graph_best)
 
+    fusion_start = time.monotonic()
     fused_scores = reciprocal_rank_fusion(ranked_lists, k=settings.rrf_k)
     ordered_ids = sorted(fused_scores, key=lambda pid: fused_scores[pid], reverse=True)[:top_k]
+    if mode == "hybrid":
+        timings_ms["fusion"] = int((time.monotonic() - fusion_start) * 1000)
 
     if not ordered_ids:
+        logger.info("search_completed", mode=mode, result_count=0, timings_ms=timings_ms)
         return SearchResponseOut(results=[], mode=mode, timings_ms=timings_ms)
 
     postmortems_result = await db.execute(
@@ -202,4 +209,5 @@ async def hybrid_search(
             )
         )
 
+    logger.info("search_completed", mode=mode, result_count=len(results), timings_ms=timings_ms)
     return SearchResponseOut(results=results, mode=mode, timings_ms=timings_ms)
