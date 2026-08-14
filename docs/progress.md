@@ -852,7 +852,7 @@ written, which is what actually surfaced this phase's CRLF SSE-framing bug (belo
 
 Full detail on all findings and design rationale: ADR 0009.
 
-## Phase 10 — Service Map, Knowledge Base, Dashboard — done, PR open
+## Phase 10 — Service Map, Knowledge Base, Dashboard — done, PR open ([PR #11](https://github.com/Santhosh0619/hindsight/pull/11))
 
 Target checkpoint (Master-Prompt.md): all three screens work against seeded data and
 are usable on a laptop screen without horizontal scrolling.
@@ -889,9 +889,9 @@ highlighting gap described below.
 | 9. TEST-FE | done | `tsc --noEmit`, `eslint --max-warnings 0`, `prettier --check`, `vitest` (79/79), `vite build` all clean, run inside the `web` container |
 | 10. REVIEW-FE | **APPROVED** | First pass: 1 BLOCKING + 2 WARNING, all against the Service Map specifically — see below. Fixed all 3; re-review independently re-read the corrected code, ran the affected tests itself (18/18), confirmed a clean `tsc --noEmit`, and approved with 0/0/0 (1 non-blocking note about a missing retry button, not required by any finding). |
 | 11. TEST-E2E | done | `e2e/tests/service-map-kb-dashboard.spec.ts` (5 tests) against `docker-compose.test.yml`, 5/5 passing on the first run (21/21 across the full e2e suite, after fixing one pre-existing test that asserted the now-replaced `/dashboard` stub's placeholder text) |
-| 12. PUSH | pending | |
-| 13. PR | pending | |
-| 14. MERGE | pending | |
+| 12. PUSH | done | `feat/service-map-kb-dashboard` pushed; pre-push hook (ruff, mypy, pytest, tsc, eslint, prettier, vitest, build, all in Docker) passed |
+| 13. PR | done | [#11](https://github.com/Santhosh0619/hindsight/pull/11) opened against `main` |
+| 14. MERGE | pending | awaiting explicit go-ahead |
 
 ### Bugs found only by the code-reviewer sub-agent (not by any tool)
 
