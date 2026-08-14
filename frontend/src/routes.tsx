@@ -3,6 +3,7 @@ import { Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/layout/AppShell";
 import { ProtectedRoute } from "@/lib/auth";
 import { SCREENS } from "@/lib/screens";
+import { Dashboard } from "@/pages/Dashboard";
 import { IncidentDetail } from "@/pages/IncidentDetail";
 import { IncidentList } from "@/pages/IncidentList";
 import { KnowledgeBase } from "@/pages/KnowledgeBase";
@@ -24,6 +25,7 @@ const IMPLEMENTED_PAGES: Partial<Record<string, React.ComponentType>> = {
   "/incidents": IncidentList,
   "/service-map": ServiceMap,
   "/knowledge-base": KnowledgeBase,
+  "/dashboard": Dashboard,
 };
 
 export function AppRoutes(): React.JSX.Element {
