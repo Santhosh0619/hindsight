@@ -27,7 +27,7 @@ class IncidentOut(BaseModel):
     external_ref: str | None
     title: str
     raw_alert_text: str
-    severity: str | None
+    severity: Severity | None
     status: IncidentStatus
     opened_by: uuid.UUID | None
     opened_at: datetime

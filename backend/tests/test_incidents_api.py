@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import UTC, datetime
 
@@ -168,6 +169,34 @@ async def test_generating_a_brief_with_no_llm_configured_still_returns_a_determi
     )
     assert listed.status_code == 200
     assert len(listed.json()) == 1
+
+
+async def test_stream_brief_endpoint_returns_a_real_sse_event_sequence(
+    client: AsyncClient,
+) -> None:
+    # Exercises the real HTTP/ASGI route, not incidents_service directly -- this is
+    # the layer where a request-scoped DB session closing before the generator body
+    # actually runs would otherwise go unnoticed (see ADR).
+    owner = await signup(client)
+    token = owner["access_token"]
+    workspace_id = await _workspace_id(client, token)
+    incident_id = await _create_incident(client, token, workspace_id)
+
+    events = []
+    async with client.stream(
+        "GET",
+        f"/api/v1/workspaces/{workspace_id}/incidents/{incident_id}/brief/stream",
+        headers=auth_headers(token),
+    ) as response:
+        assert response.status_code == 200
+        async for line in response.aiter_lines():
+            if line.startswith("data:"):
+                events.append(json.loads(line[len("data:") :].strip()))
+
+    event_types = [e["type"] for e in events]
+    assert event_types[0] == "node_start"
+    assert event_types[-1] == "done"
+    assert events[-1]["brief_id"] is not None
 
 
 async def test_feedback_requires_the_brief_to_belong_to_the_named_incident(

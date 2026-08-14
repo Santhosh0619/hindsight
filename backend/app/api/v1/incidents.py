@@ -9,7 +9,9 @@ from sse_starlette.sse import EventSourceResponse
 from app.core.config import get_settings
 from app.core.deps import CurrentUser, CurrentWorkspaceMember, DbSession, require_role
 from app.core.pagination import CursorPage
+from app.db.session import get_session_factory
 from app.models.incident import IncidentStatus
+from app.models.postmortem import Severity
 from app.models.workspace import WorkspaceRole
 from app.schemas.incident_api import (
     BriefFeedbackCreate,
@@ -50,7 +52,7 @@ async def list_incidents(
     membership: CurrentWorkspaceMember,
     db: DbSession,
     status_filter: Annotated[IncidentStatus | None, Query(alias="status")] = None,
-    severity: Annotated[str | None, Query()] = None,
+    severity: Annotated[Severity | None, Query()] = None,
     service_id: Annotated[uuid.UUID | None, Query()] = None,
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
@@ -59,7 +61,7 @@ async def list_incidents(
         db,
         workspace_id=workspace_id,
         status=status_filter,
-        severity=severity,
+        severity=severity.value if severity else None,
         service_id=service_id,
         cursor=cursor,
         limit=limit,
@@ -113,15 +115,21 @@ async def stream_brief(
     membership: OwnerOrResponder,
     db: DbSession,
 ) -> EventSourceResponse:
+    # `db` (FastAPI's request-scoped session) is closed by the dependency's own
+    # AsyncExitStack as soon as this handler returns the response object -- before
+    # Starlette ever starts iterating the SSE body. The generator below must own a
+    # session scoped to its own lifetime, not borrow one that's already gone by the
+    # time it actually runs (same discipline already applied to the checkpointer).
     incident = await incidents_service.get_incident(db, workspace_id, incident_id)
-    graph_store = PostgresGraphStore(db)
-    router_ = build_router(get_settings())
 
     async def _sse_events() -> AsyncIterator[dict[str, str]]:
-        async for event in incidents_service.stream_brief_generation(
-            db, graph_store, router_, incident=incident
-        ):
-            yield {"event": str(event["type"]), "data": json.dumps(event)}
+        async with get_session_factory()() as stream_db:
+            graph_store = PostgresGraphStore(stream_db)
+            router_ = build_router(get_settings())
+            async for event in incidents_service.stream_brief_generation(
+                stream_db, graph_store, router_, incident=incident
+            ):
+                yield {"event": str(event["type"]), "data": json.dumps(event)}
 
     return EventSourceResponse(_sse_events())
 
