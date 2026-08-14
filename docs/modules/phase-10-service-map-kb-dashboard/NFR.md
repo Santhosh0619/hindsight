@@ -6,10 +6,12 @@
   every postmortem on the current page (`PostmortemService` joined to `Service`,
   grouped by `postmortem_id`), never per-row — same discipline as `_enrich_brief`
   (Phase 9) and blast-radius path resolution (Phase 4).
-- `get_dashboard`'s five aggregate queries run concurrently (`asyncio.gather`) where
-  they touch disjoint tables — open-incident count, postmortem status counts, brief
-  count, MTTR buckets, and fragile-service ranking don't depend on each other's
-  results, so there's no reason to serialize them.
+- `get_dashboard`'s aggregate queries run sequentially against the single request-scoped
+  `AsyncSession`, deliberately not `asyncio.gather`'d — this codebase has already hit
+  the "concurrent operations on one shared session" failure twice (ADR 0007 §1, ADR
+  0008 §4), and every one of these queries is small enough (a handful of small
+  aggregates against a single workspace) that sequential execution costs single-digit
+  milliseconds total, not worth reintroducing that bug class for.
 - Fragile-service ranking calls `graph_store.blast_radius` once per service in the
   workspace, bounded by catalog size (Phase 11's target is 40), not by incident
   volume — a workspace with thousands of incidents doesn't make this query any slower.
@@ -41,10 +43,13 @@
 
 ## Reliability
 
-- `get_postmortem_detail` never raises on a fact whose `source_chunk_id` no longer
-  resolves (chunk deleted) — that fact is silently omitted from the response, the same
-  "drop a dangling reference rather than 500 the whole response" rule Phase 9's
-  `_enrich_brief` established.
+- `get_postmortem_detail` joins facts to their source chunk rather than resolving each
+  fact's offsets through a separate lookup with a "what if it's missing" branch —
+  `PostmortemFact.source_chunk_id` is a real, enforced foreign key with `ON DELETE
+  CASCADE`, so a fact can never actually outlive its chunk (unlike Phase 9's
+  JSONB-stored citations, which have no DB-level guarantee and do need that defensive
+  drop). Trusting a real constraint instead of re-implementing its guarantee in
+  application code.
 - The Service Map's layering algorithm treats a cycle as a back-edge to skip, not an
   error — a catalog graph with a cycle (which Phase 4's own traversal already
   tolerates) still produces a valid, terminating layout, never an infinite loop or a
@@ -63,11 +68,11 @@
 
 ## Testability
 
-- Backend: `test_postmortems_api.py` (extended) covers the new `affected_services`/
+- Backend: `test_postmortems.py` (extended) covers the new `affected_services`/
   `facts`/`redacted_text` fields against hand-inserted `PostmortemFact`/
   `PostmortemService` rows (no LLM key configured in this build — see FRD Gap #2, same
-  approach `test_enrich_brief.py` used for citations in Phase 9), including the
-  dangling-`source_chunk_id` edge case. `test_dashboard_service.py` (new) covers each
+  approach `test_enrich_brief.py` used for citations in Phase 9). `test_dashboard_
+  service.py` (new) covers each
   aggregate independently against fixtures (a resolved incident inside/outside an MTTR
   bucket boundary, a service with zero vs. nonzero blast radius, an empty workspace).
 - Frontend: `graph-layout.test.ts` covers the layered-layout algorithm directly against
