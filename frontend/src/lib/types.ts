@@ -1,5 +1,6 @@
-// Hand-kept in sync with backend/app/schemas/{auth,workspace}.py — no codegen in this
-// phase (see docs/modules/phase-3-frontend-foundation/NFR.md "Constraints").
+// Hand-kept in sync with backend/app/schemas/{auth,workspace,postmortem,search}.py —
+// no codegen in this phase (see docs/modules/phase-3-frontend-foundation/NFR.md
+// "Constraints").
 
 export type WorkspaceRole = "owner" | "responder" | "viewer";
 
@@ -43,4 +44,56 @@ export interface ApiErrorBody {
     message: string;
     detail: unknown;
   };
+}
+
+export type Severity = "sev1" | "sev2" | "sev3" | "sev4";
+export type PostmortemStatus = "pending" | "processing" | "indexed" | "failed";
+export type ServiceLinkRole = "root_cause" | "affected" | "downstream";
+
+export interface PostmortemOut {
+  id: string;
+  external_ref: string | null;
+  title: string;
+  occurred_at: string | null;
+  duration_minutes: number | null;
+  severity: Severity | null;
+  status: PostmortemStatus;
+  injection_flagged: boolean;
+  failure_reason: string | null;
+  created_at: string;
+}
+
+export type SearchMode = "hybrid" | "vector" | "keyword" | "graph";
+export type SourceName = "vector" | "keyword" | "graph";
+
+export interface SourceHitOut {
+  source: SourceName;
+  rank: number;
+  raw_score: number;
+}
+
+export interface ChunkExcerptOut {
+  chunk_id: string;
+  section_label: string | null;
+  content: string;
+}
+
+export interface GraphReasonOut {
+  matched_service_name: string;
+  via_service_name: string | null;
+  role: ServiceLinkRole;
+}
+
+export interface SearchResultOut {
+  postmortem: PostmortemOut;
+  score: number;
+  sources: SourceHitOut[];
+  chunk_excerpt: ChunkExcerptOut | null;
+  graph_reason: GraphReasonOut | null;
+}
+
+export interface SearchResponseOut {
+  results: SearchResultOut[];
+  mode: SearchMode;
+  timings_ms: Record<string, number>;
 }
