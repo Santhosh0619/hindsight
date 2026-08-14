@@ -547,7 +547,107 @@ cleanly with `"All LLM providers unavailable"` and dead-lettered after retrying.
 
 Full detail on all findings and design rationale: ADR 0006.
 
-## Phase 7 — Hybrid Retrieval — pending
+## Phase 7 — Hybrid Retrieval — done, PR open ([PR #8](https://github.com/Santhosh0619/hindsight/pull/8))
+
+Target checkpoint (Master-Prompt.md): query the same corpus in `vector`/`keyword`/
+`graph`/`hybrid` mode and get visibly different, correctly-attributed result sets;
+F10 renders the mode toggle and a colored chip per contributing retriever.
+
+Verified three ways: 115 automated backend tests (up from 99 going into this phase —
+5 in `test_fusion.py`, plus new cases in `test_retrieval.py`/`test_search_api.py`) run
+against the real dev Postgres and the real `sentence-transformers` model, with
+distance-threshold assertions calibrated against actually-measured embeddings rather
+than assumed. 18 frontend tests (4 new in `Search.test.tsx`) via `vitest`. **Also**
+verified with a real automated Playwright e2e suite (`e2e/tests/search.spec.ts`, 4
+tests) against the fully isolated `docker-compose.test.yml` stack — newly extended with
+a `worker-test` service so ingested postmortems actually reach `indexed` — covering the
+vector/keyword happy path with source-attribution chips, the no-results empty state,
+cross-workspace isolation, and the unauthenticated redirect.
+
+| Step | Status | Notes |
+|---|---|---|
+| 1. BRANCH | done | `feat/hybrid-retrieval`, created from `main` after Phase 6 merged |
+| 2. READ | done | |
+| 3. EXPLORE | done | Reviewed Phase 4's `GraphStore` protocol, Phase 5's `embed()`, Phase 6's role values (`root_cause`/`affected`/`downstream`), and `Settings.rrf_k` (defined since Phase 1, unused until now) before writing docs |
+| 4. DOCUMENT | done | `docs/modules/phase-7-hybrid-retrieval/{PRD,FRD,NFR}.md` committed before any code |
+| 5. CODE-BE | done | `app/services/retrieval/{vector,keyword,graph,fusion,hybrid}.py`, `app/schemas/search.py`, `app/api/v1/search.py` |
+| 6. TEST-BE | done | `ruff`, `mypy --strict`, `pytest` (115/115) all clean, run inside the `api` container |
+| 7. REVIEW-BE | **APPROVED** | First pass: 1 BLOCKING (`search_completed` structlog event entirely missing) + 3 WARNING (`timings_ms` missing a `fusion` key in hybrid mode; `search_graph`'s final query missing a defense-in-depth `workspace_id` filter; whitespace-only queries not rejected). Fixed all 4; re-review → APPROVED, 1 optional WARNING (a regression test that didn't actually exercise the filter it was named after — see ADR 0007 §4) + 1 optional NOTE, both addressed before push. |
+| 8. CODE-FE | done | `frontend/src/pages/Search.tsx` (mode toggle, debounced query, source-attribution chips, graph-reason text), `lib/{types,api}.ts` additions, routing wiring |
+| 9. TEST-FE | done | `tsc --noEmit`, `eslint --max-warnings 0`, `prettier --check`, `vitest` (18/18), `vite build` all clean, run inside the `web` container |
+| 10. REVIEW-FE | **APPROVED** | 0 blocking / 0 warnings / 0 notes on the first pass |
+| 11. TEST-E2E | done | `e2e/tests/search.spec.ts` (4 tests) against the extended `docker-compose.test.yml` stack, 4/4 passing (12/12 across the full e2e suite). Graph mode's fixture needs a real LLM (not configured in this stack) to link a postmortem to a service, so graph-mode-specific e2e coverage stays deferred to backend pytest's DB-level fixtures until a key is added — see ADR 0007 §5. |
+| 12. PUSH | done | `feat/hybrid-retrieval` pushed; pre-push hook (ruff, mypy, pytest, tsc, eslint, prettier, vitest, build, all in Docker) passed |
+| 13. PR | done | [#8](https://github.com/Santhosh0619/hindsight/pull/8) opened against `main` |
+| 14. MERGE | pending | awaiting explicit go-ahead |
+
+### Bugs found only by measuring real embeddings (not by reasoning about them)
+
+- **A test assumed vector search would miss an exact error code — it actually finds it
+  easily.** Initial assumption: an embedding model represents an exact string like
+  `"ORA-12520"` badly, so vector search should miss it while keyword search catches it.
+  Measuring the real distance for a chunk containing the literal query substring showed
+  ~0.576 — comfortably inside the 0.7 threshold — because a chunk that contains the exact
+  query text really is more semantically similar to it than two independently-written
+  sentences on the same topic are to each other. The test's original name and assertion
+  claimed the opposite; caught only by running the real numbers, not by reasoning about
+  embeddings in the abstract. Rewrote to assert keyword's own positive capability
+  instead of an unprovable comparative claim. See ADR 0007 §2.
+
+### Bugs found only by the code-reviewer sub-agent (not by any tool)
+
+- **`search_completed` was never logged** — the NFR's one required structured-logging
+  event for this phase was entirely absent from `hybrid_search`. Fixed by logging it at
+  both the early-empty-return and the final return path.
+- **`timings_ms` never included a `fusion` key in hybrid mode**, despite RRF being a real
+  (if fast) step in the request. Fixed by timing the `reciprocal_rank_fusion` call
+  itself.
+- **`search_graph`'s final query had no explicit `workspace_id` filter** — not currently
+  exploitable via the public API (`candidates` is already transitively workspace-scoped
+  upstream), but a defense-in-depth gap the reviewer flagged on its own merits. Fixed by
+  adding the filter — which then surfaced that the regression test written to guard it
+  didn't actually exercise it; see the next section.
+- **Whitespace-only queries (`"   "`) passed FastAPI's own `Query(min_length=1)` check**
+  (length 3) without being rejected. Fixed with an explicit `if not q.strip(): raise
+  ValidationAppError(...)` in the route, plus a new test covering it directly (distinct
+  from the existing empty-string test, which exercises Pydantic's validator instead).
+- **A regression test passed regardless of the fix it was named after.** Full story in
+  ADR 0007 §4 — two workspaces' same-named services always get structurally distinct
+  ids, so the original test's collision scenario could never actually collide. Rewritten
+  to engineer a real collision directly (a postmortem in workspace A linked to a service
+  in workspace B via direct DB insert, a state the public API itself can never produce),
+  so the test now fails if the filter is reverted and passes only because the filter
+  exists.
+
+### Infra bug found only by running the new e2e suite for real
+
+- **The first e2e test failed on a UI-assertion timeout unrelated to search
+  correctness.** `api-test`'s first-ever `embed()` call in a freshly built container
+  cold-loads `sentence-transformers`/`torch`, taking longer than a `toBeVisible()`
+  assertion's default 5s timeout; every later query in the same run was fast once the
+  model was already loaded in that process. Also had to add a `worker-test` service to
+  `docker-compose.test.yml` in the first place — no prior phase's e2e coverage needed a
+  postmortem to actually finish ingesting. Fixed the timeout issue with a
+  `test.beforeAll` warm-up request rather than raising every assertion's timeout, which
+  would have hidden a real regression in that same window. See ADR 0007 §5.
+
+### Design decisions worth noting
+
+- The concurrency-safety split for `mode=hybrid`'s three parallel retrievers (vector and
+  keyword each get a fresh `AsyncSession`; graph reuses the caller's) was independently
+  re-verified by a second code-reviewer pass specifically checking the reasoning against
+  the actual `asyncio.gather` call site, not just trusting the comment. See ADR 0007 §1.
+- `DEFAULT_MAX_DISTANCE=0.7` was calibrated against real measured embeddings
+  (paraphrase pairs ~0.43, unrelated pairs ~0.85–1.0), not chosen by guessing a
+  plausible-looking number. See ADR 0007 §2.
+- Single-mode search still runs its one ranked list through `reciprocal_rank_fusion`
+  rather than branching around it — mathematically a no-op (same relative order), one
+  fewer code path to keep correct. Flagged as an optional FRD-wording mismatch by
+  review and left as-is. See ADR 0007 §3.
+
+Full detail on all findings and design rationale: ADR 0007.
+
+## Phase 8 — LangGraph Agent Pipeline — pending
 ## Phase 8 — LangGraph Agent Pipeline — pending
 ## Phase 9 — Incidents API + The Money Screen — pending
 ## Phase 10 — Service Map, Knowledge Base, Dashboard — pending

@@ -503,3 +503,71 @@ point a supposedly-unset key evaluated truthy, and the router tried to call Gemi
 with a "model name" that was literally the comment text. Fixed by moving every such
 comment to its own line above the bare `KEY=` — the general rule now: never put an
 inline comment on a line whose value is meant to be blank.
+
+---
+
+## Phase 7 — Hybrid Retrieval
+
+**Q: You run three retrievers concurrently with `asyncio.gather`. `AsyncSession` isn't
+safe for concurrent use — how do you avoid corrupting it?**
+
+A: Not every concurrent task needs its own session — only the ones that would otherwise
+share one with something else running at the same time. Vector and keyword retrieval
+each open a fresh session via `get_session_factory()` for the duration of `mode=hybrid`,
+because both run alongside the third task. Graph retrieval reuses the caller's own
+session directly, because it's the *only* one of the three concurrent tasks touching
+that particular session — there's nothing to corrupt. Single-mode search (just one
+retriever, no `gather`) always uses the caller's session for whatever it runs, since
+there's no concurrency to guard against in the first place. A second independent
+code-reviewer pass specifically re-checked this reasoning against the actual call site
+before the phase was approved, not just the comment asserting it's true.
+
+**Q: How did you pick `0.7` as the vector-search distance cutoff instead of just
+guessing a number that looked reasonable?**
+
+A: Embedded real paraphrase pairs and real unrelated pairs through this project's actual
+`sentence-transformers` model via a throwaway script first. Paraphrases landed around
+0.43 cosine distance, unrelated pairs around 0.85–1.0 — comfortable separation, so 0.7
+sits well inside the gap. That same calibration step caught a wrong assumption before it
+shipped as a test: I initially assumed vector search would *miss* a postmortem
+containing an exact error code like "ORA-12520," since embeddings supposedly represent
+exact strings badly. Measuring the real distance showed the opposite — a chunk
+containing the literal query substring sits *close* (~0.576), not far, because it really
+is more similar to the query than two independently-written sentences on the same
+topic. The test that assumed otherwise was wrong; I caught it by running the real
+numbers instead of reasoning about it in the abstract, and rewrote the test to assert
+only what's actually true.
+
+**Q: A regression test you wrote for a workspace-isolation bug fix passed even when you
+mentally reverted the fix — what happened, and what does that tell you about writing
+regression tests in general?**
+
+A: The fix added an explicit `workspace_id` filter to `search_graph`'s final query,
+defense-in-depth against a hypothetical future regression in the upstream scoping it
+already relies on. The regression test gave two workspaces a same-named service and
+checked for no leakage — but two workspaces' services always get distinct UUIDs no
+matter what they're named, so the candidate set for workspace B's search could
+structurally never contain workspace A's service id, filter or no filter. A second
+code-reviewer re-review pass caught that the test's assertion was true regardless of the
+fix. Rewrote it to directly insert a `PostmortemService` row linking workspace A's
+postmortem to workspace B's *real* service id — a state the public API itself could
+never produce, engineered on purpose so the new filter is the only thing standing
+between the query and a leak. The lesson: a regression test should fail when you
+mentally (or actually) revert the fix it's guarding. If it can't fail that way, it isn't
+testing the fix, whatever its name claims.
+
+**Q: Your first e2e run against the search page failed on a timeout that had nothing to
+do with search logic — what was it, and how did you fix it without just raising the
+timeout number?**
+
+A: The first `search.spec.ts` test hit a UI assertion's default 5-second timeout on a
+result that appeared correctly a few hundred milliseconds later, after the timeout had
+already failed the test. The root cause: `api-test` is a freshly built container for
+every e2e run, and the *first* time anything in that process calls `embed()`, Python has
+to import and initialize `sentence-transformers`/`torch` and load the model weights into
+memory — a one-time cost of several seconds that has nothing to do with whether search
+itself works. Every later query in the same run was fast, because the model stayed
+loaded. Raising the timeout on every assertion would have hidden a real regression in
+that same window if one ever appeared. Instead, added a `test.beforeAll` hook that fires
+one throwaway search request before any timed assertion runs, so the cold start happens
+during setup and every real assertion is timing the feature, not the interpreter.
