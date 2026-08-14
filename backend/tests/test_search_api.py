@@ -238,7 +238,7 @@ async def test_search_never_returns_another_workspaces_postmortems(
     assert pm_a not in result_ids
 
 
-async def test_graph_and_hybrid_mode_never_leak_across_workspaces_with_same_service_name(
+async def test_search_graph_never_returns_a_postmortem_from_another_workspace(
     client: AsyncClient, db: AsyncSession
 ) -> None:
     owner_a = await signup(client)
@@ -248,30 +248,31 @@ async def test_graph_and_hybrid_mode_never_leak_across_workspaces_with_same_serv
     workspace_a = await _workspace_id(client, token_a)
     workspace_b = await _workspace_id(client, token_b)
 
-    # Both workspaces independently name a service "shared-svc" -- distinct rows,
-    # same name, the realistic near-miss case for a workspace_id-scoping bug.
-    service_a = await client.post(
-        f"/api/v1/workspaces/{workspace_a}/catalog/services",
-        json={"name": "shared-svc", "tier": 1},
-        headers=auth_headers(token_a),
-    )
-    await client.post(
-        f"/api/v1/workspaces/{workspace_b}/catalog/services",
-        json={"name": "shared-svc", "tier": 1},
-        headers=auth_headers(token_b),
-    )
-
     pm_a = await _ingest(
         client,
         db,
         token=token_a,
         workspace_id=workspace_a,
-        raw_text="Summary:\nshared-svc had an outage in workspace A.\n",
+        raw_text="Summary:\nAn outage that only ever belongs to workspace A.\n",
     )
+
+    service_b = await client.post(
+        f"/api/v1/workspaces/{workspace_b}/catalog/services",
+        json={"name": "svc-b", "tier": 1},
+        headers=auth_headers(token_b),
+    )
+    service_b_id = service_b.json()["id"]
+
+    # A data-integrity violation the real API can never produce (service creation and
+    # linking always stay within one workspace) -- engineered directly so svc-b's id
+    # is a genuine candidate in workspace B's own search_graph call, proving the
+    # Postmortem.workspace_id filter in graph.py is what keeps workspace A's
+    # postmortem out of workspace B's results here, not incidental id non-overlap.
+    # Without that filter, this assertion would fail.
     db.add(
         PostmortemService(
             postmortem_id=uuid.UUID(pm_a),
-            service_id=uuid.UUID(service_a.json()["id"]),
+            service_id=uuid.UUID(service_b_id),
             role=ServiceLinkRole.ROOT_CAUSE,
         )
     )
@@ -280,7 +281,7 @@ async def test_graph_and_hybrid_mode_never_leak_across_workspaces_with_same_serv
     for mode in ("graph", "hybrid"):
         response = await client.get(
             f"/api/v1/workspaces/{workspace_b}/search",
-            params={"q": "shared-svc", "mode": mode},
+            params={"q": "svc-b", "mode": mode},
             headers=auth_headers(token_b),
         )
         assert response.status_code == 200, response.text
