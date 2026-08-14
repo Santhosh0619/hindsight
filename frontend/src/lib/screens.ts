@@ -19,7 +19,7 @@ export const SCREENS: ScreenDef[] = [
   { path: "/incidents/new", label: "New Incident", phase: 9, implemented: true },
   { path: "/incidents", label: "Incidents", phase: 9, implemented: true },
   { path: "/knowledge-base", label: "Knowledge Base", phase: 10 },
-  { path: "/service-map", label: "Service Map", phase: 10 },
+  { path: "/service-map", label: "Service Map", phase: 10, implemented: true },
   { path: "/search", label: "Search", phase: 7, implemented: true },
   { path: "/evaluation", label: "Evaluation", phase: 12 },
   { path: "/agent-runs", label: "Agent Runs", phase: 13 },

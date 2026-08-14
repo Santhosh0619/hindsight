@@ -10,6 +10,7 @@ import { Login } from "@/pages/Login";
 import { NewIncident } from "@/pages/NewIncident";
 import { Onboarding } from "@/pages/Onboarding";
 import { Search } from "@/pages/Search";
+import { ServiceMap } from "@/pages/ServiceMap";
 import { Signup } from "@/pages/Signup";
 import { StubRoute } from "@/pages/StubRoute";
 
@@ -19,6 +20,7 @@ const IMPLEMENTED_PAGES: Partial<Record<string, React.ComponentType>> = {
   "/search": Search,
   "/incidents/new": NewIncident,
   "/incidents": IncidentList,
+  "/service-map": ServiceMap,
 };
 
 export function AppRoutes(): React.JSX.Element {
