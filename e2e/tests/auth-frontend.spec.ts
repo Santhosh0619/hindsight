@@ -18,7 +18,9 @@ test.describe("Landing (F1)", () => {
     await page.getByRole("button", { name: "Try the live demo" }).click();
 
     await expect(page).toHaveURL(/\/dashboard/);
-    await expect(page.getByText("Dashboard isn't built yet")).toBeVisible();
+    // Was the /dashboard stub's placeholder text before Phase 10 built the real
+    // page; now asserts real Dashboard content renders for a demo guest.
+    await expect(page.getByText("Open incidents")).toBeVisible();
   });
 });
 
