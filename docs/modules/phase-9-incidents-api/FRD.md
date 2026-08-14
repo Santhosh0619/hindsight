@@ -54,6 +54,21 @@
    batch-resolving every referenced id, root and path alike); `_enrich_blast_radius`
    in `incidents_service.py` reuses that same resolution shape instead of inventing a
    parallel one.
+6. **A real deadlock, found only by e2e-testing against a freshly created database:**
+   `AsyncPostgresSaver.setup()` (called once per `generate_brief`/`stream_brief_
+   generation`, per ADR 0008 §6's restraint against a held-open app-level
+   checkpointer) issues `CREATE INDEX CONCURRENTLY IF NOT EXISTS` the first time the
+   checkpoint tables don't yet exist. That statement blocks until every transaction
+   open anywhere on the database at the moment it starts has ended — and the calling
+   request's own session sits inside an open, SQLAlchemy-autobegun transaction for the
+   whole graph run (from `_start_agent_run`'s `db.refresh()` through to
+   `_finish_agent_run`'s final commit). `setup()` therefore waited on a transaction
+   that couldn't finish until `setup()` returned — every dev/pytest run against this
+   project's long-lived Postgres never saw it because the checkpoint tables already
+   existed from earlier manual runs, so `IF NOT EXISTS` always short-circuited before
+   the wait could ever start. A brand-new `e2e/tests/incidents.spec.ts` run against
+   the always-fresh `db-test` service hit it on the very first brief-generation call
+   and hung indefinitely. See ADR 0009 §1 for the fix.
 
 ## API Endpoints (Backend — FastAPI)
 
