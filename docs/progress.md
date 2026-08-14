@@ -647,8 +647,105 @@ cross-workspace isolation, and the unauthenticated redirect.
 
 Full detail on all findings and design rationale: ADR 0007.
 
-## Phase 8 — LangGraph Agent Pipeline — pending
-## Phase 8 — LangGraph Agent Pipeline — pending
+## Phase 8 — LangGraph Agent Pipeline — done, PR pending
+
+Target checkpoint (Master-Prompt.md): feed a seeded alert through the compiled graph in
+a script; all six nodes fire in order; force a low score and observe exactly one
+corrective loop; the output is a typed `IncidentBrief`.
+
+No real LLM key is configured this build session — same standing choice as Phase 6
+(build and verify against mocks, add a real key later). Verified two ways: 22 new
+automated backend tests (up from 133 going into this phase — 7 in
+`test_route_after_critic.py`, 3 in `test_correlator.py`, 4 in `test_citation_check.py`,
+6 in `test_agent_pipeline.py`, 1 in `test_checkpointer.py`, 1 in `test_streaming.py`)
+run against the real dev Postgres and `pydantic-ai`'s real `TestModel`/`FunctionModel`
+utilities (never a real network call). **Also** verified two pieces of real
+infrastructure directly: a real `AsyncPostgresSaver` checkpointer built, `.setup()` run,
+a real graph invoked through it, and the persisted checkpoint read back and asserted on
+(`test_checkpointer.py`); and the real `stream_graph_events` SSE-event generator driven
+against a real graph run, which is what caught this phase's one genuine concurrency bug
+(see below).
+
+| Step | Status | Notes |
+|---|---|---|
+| 1. BRANCH | done | `feat/agent-pipeline`, created from `main` after Phase 7 merged |
+| 2. READ | done | |
+| 3. EXPLORE | done | Re-verified `langgraph` 1.2.11 / `langgraph-checkpoint-postgres` 3.1.2's real API live (no drift from Phase 0's ADR 0000 findings) before writing any node code — `AsyncPostgresSaver.from_conn_string`/`.setup()`, `StateGraph`/`add_conditional_edges`/`astream_events` all introspected and smoke-tested against the real dev Postgres |
+| 4. DOCUMENT | done | `docs/modules/phase-8-agent-pipeline/{PRD,FRD,NFR}.md` committed before any code — including a documented decision to *not* wire the checkpointer into `app/main.py`'s lifespan this phase, reconsidered before implementation began |
+| 5. CODE-BE | done | `app/agents/{state,nodes,edges,build_graph,streaming,normalizer_agent,analyst_agent,critic_agent,correlator,citation_check}.py`, `app/schemas/incident.py`; promoted Phase 7's private `_recency_weight` to public `recency_weight` for reuse; added `psycopg[binary]`/`langgraph-checkpoint-postgres` dependencies |
+| 6. TEST-BE | done | `ruff`, `mypy --strict`, `pytest` (135/135) all clean, run inside the rebuilt `api` container |
+| 7. REVIEW-BE | **APPROVED** | First pass: 3 BLOCKING + 3 WARNING + 1 NOTE — see below. Fixed all 7; re-review → APPROVED, 0/0/0, independently re-verified (not just re-checking the same 7 items). |
+| 8-10 | n/a | No frontend deliverable this phase per its own PRD's Out of Scope — F5/F6 are Phase 9 |
+| 11. TEST-E2E | n/a | No UI this phase to exercise — same rationale as Phases 4-6 |
+| 12. PUSH | pending | |
+| 13. PR | pending | |
+| 14. MERGE | pending | |
+
+### The one bug found only by running real code, not by design review
+
+- **`stream_graph_events` raced its own database session against the graph it was
+  observing.** The first version wrote each node's `AgentRunStep` row through the same
+  session bound into the graph's nodes. `astream_events` runs the compiled graph as its
+  own concurrent task while the consuming generator executes independently, so the
+  observer loop's commit for one node's step row raced against the next node's own
+  queries on that same session — `This session is provisioning a new connection;
+  concurrent operations are not permitted`, the moment a real graph was actually run
+  through the real wrapper. Same underlying class of bug as ADR 0007 §1 (Phase 7's
+  concurrent retrievers needing their own sessions), here between an external observer
+  and the graph run instead of between sibling retrievers. Two code-review passes
+  reading the design didn't catch it — only execution did. Fixed by giving every
+  `AgentRunStep` write its own fresh session. See ADR 0008 §4.
+
+### Bugs found only by the code-reviewer sub-agent (not by any tool)
+
+- **`critic_node` had no `LLMUnavailableError` guard around its judge call**, while
+  `normalizer_node`/`analyst_node` both did — a mid-run quota failure after normalizer
+  and analyst already succeeded would have crashed the whole graph instead of degrading
+  per FR-08. Fixed with the same catch-and-pass-through pattern the other two nodes use.
+- **The FRD claimed Postgres checkpointing and the streaming event generator were both
+  "smoke-tested"/"unit-tested" this phase — neither actually had a test.** Both gaps
+  were real, not just documentation drift: writing the missing checkpointer test was
+  straightforward (and passed cleanly); writing the missing streaming test is what
+  surfaced the concurrency bug above, which the missing test coverage had been quietly
+  hiding.
+- **`streaming.py`'s final `done` event never actually carried a `brief_id`** despite
+  the FRD saying it would. Fixed by giving `IncidentBrief` its own `id` field
+  (populated from the persisted `Brief` row after commit, since a client-side UUID
+  default is only populated at flush) and threading it through from the `briefer`
+  node's `on_chain_end` output.
+- **The FRD's own claim that service-name resolution is "case-insensitive" didn't match
+  the code — or Phase 6's real precedent, which is also case-sensitive.** Corrected the
+  doc rather than the code, since case-sensitivity matches this codebase's actual
+  established behavior, not an idealized version of it.
+- **A dead `structlog` logger sat imported and unused in `nodes.py`**, while the NFR
+  promised `agent_run_started`/`agent_run_completed` events that don't exist anywhere in
+  the diff. Removed the dead import; corrected the NFR to explicitly defer that
+  bracketing to Phase 9, which is where this graph's first real invocation entrypoint
+  actually lives (matching Phase 6's identical `extraction_service.py` precedent).
+- A NOTE-level gap also fixed: the retry test asserted a retry happened but never that
+  the retry's query actually differed from the original, per the PRD's own acceptance
+  criterion wording.
+
+### Design decisions worth noting
+
+- `TriageState` needed three keys beyond Master-Prompt.md's literal field list
+  (`blast_radius`, `llm_used`, `from_cache`) — the same class of plan-filling judgment
+  call as Phase 6's un-named failure-mode taxonomy. See ADR 0008 §1.
+- `correlator_node`'s `failure_mode_overlap` subscore is a recurrence signal computed
+  across the retrieved candidates themselves, not a comparison against an
+  incident-level failure-mode classification that doesn't exist (and would require a
+  fourth LLM call to produce, forbidden in a "no LLM" node). See ADR 0008 §2.
+- The critic's deterministic citation gate validates against exactly the chunk ids
+  shown to the analyst in its prompt, not every chunk that postmortem happens to own —
+  a narrower, more honest definition of "grounded." See ADR 0008 §3.
+- `analyst_node` is the semantic cache's real first consumer, exactly as ADR 0006 §2
+  predicted back in Phase 6. See ADR 0008 §5.
+- The checkpointer is fully built and live-verified but deliberately not wired into
+  `app/main.py`'s startup this phase — no real caller exists until Phase 9. See ADR
+  0008 §6.
+
+Full detail on all findings and design rationale: ADR 0008.
+
 ## Phase 9 — Incidents API + The Money Screen — pending
 ## Phase 10 — Service Map, Knowledge Base, Dashboard — pending
 ## Phase 11 — Seed Corpus & Demo Mode — pending
