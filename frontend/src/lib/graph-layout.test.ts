@@ -103,4 +103,35 @@ describe("layeredLayout", () => {
 
     expect(layout.get("lonely")?.layer).toBe(0);
   });
+
+  it("completes and places every node at Phase 11's target scale (40 nodes, 60 edges)", () => {
+    const nodeCount = 40;
+    const nodes = Array.from({ length: nodeCount }, (_, i) => ({
+      id: `svc-${i}`,
+      name: `service-${i.toString().padStart(2, "0")}`,
+    }));
+    // A deterministic, reproducible edge set -- not random -- covering a mix of
+    // short/long hops and a handful of back-edges so the fixture isn't just a
+    // trivial chain the way the smaller tests above already are.
+    const edges: { from_service_id: string; to_service_id: string }[] = [];
+    for (let i = 0; i < nodeCount - 1; i++) {
+      edges.push({ from_service_id: `svc-${i}`, to_service_id: `svc-${i + 1}` });
+    }
+    for (let i = 0; edges.length < 60; i++) {
+      const from = i % nodeCount;
+      const to = (i * 7 + 3) % nodeCount;
+      if (from !== to) edges.push({ from_service_id: `svc-${from}`, to_service_id: `svc-${to}` });
+    }
+
+    const layout = layeredLayout(nodes, edges);
+
+    expect(layout.size).toBe(nodeCount);
+    for (const node of nodes) {
+      const placed = layout.get(node.id);
+      expect(placed).toBeDefined();
+      expect(Number.isFinite(placed?.layer)).toBe(true);
+      expect(Number.isFinite(placed?.x)).toBe(true);
+      expect(Number.isFinite(placed?.y)).toBe(true);
+    }
+  });
 });

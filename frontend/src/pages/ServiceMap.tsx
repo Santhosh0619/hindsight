@@ -67,7 +67,12 @@ export function ServiceMap(): React.JSX.Element {
         title="Service Map"
         description="The dependency graph behind every blast-radius score."
       />
-      {nodes.length === 0 ? (
+      {graphQuery.isError || teamsQuery.isError ? (
+        <EmptyState
+          title="Couldn't load the service map"
+          description="Something went wrong fetching the catalog. Try again."
+        />
+      ) : nodes.length === 0 ? (
         <EmptyState
           title="No services yet"
           description="Add services and dependencies from the catalog to see them here."
@@ -115,6 +120,7 @@ export function ServiceMap(): React.JSX.Element {
                 team={selectedTeam}
                 blastRadius={blastRadiusQuery.data}
                 blastRadiusLoading={blastRadiusQuery.isLoading}
+                blastRadiusError={blastRadiusQuery.isError}
                 onClose={() => setSelectedServiceId(null)}
               />
             ) : null}

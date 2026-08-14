@@ -64,6 +64,7 @@ function renderPanel(overrides: Partial<React.ComponentProps<typeof ServiceSideP
           team={TEAM}
           blastRadius={BLAST_RADIUS}
           blastRadiusLoading={false}
+          blastRadiusError={false}
           onClose={vi.fn()}
           {...overrides}
         />
@@ -116,5 +117,23 @@ describe("ServiceSidePanel", () => {
     await waitFor(() => {
       expect(screen.getByText("No incidents recorded")).toBeInTheDocument();
     });
+  });
+
+  it("shows a distinct error when the blast radius fails to load", () => {
+    mockListIncidents.mockResolvedValue({ items: [], next_cursor: null });
+    renderPanel({ blastRadius: undefined, blastRadiusError: true });
+
+    expect(screen.getByText("Couldn't load blast radius.")).toBeInTheDocument();
+    expect(screen.queryByText("No downstream impact")).not.toBeInTheDocument();
+  });
+
+  it("shows a distinct error when incident history fails to load", async () => {
+    mockListIncidents.mockRejectedValue(new Error("boom"));
+    renderPanel();
+
+    await waitFor(() => {
+      expect(screen.getByText("Couldn't load incident history.")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("No incidents recorded")).not.toBeInTheDocument();
   });
 });

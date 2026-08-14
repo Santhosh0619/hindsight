@@ -24,6 +24,7 @@ export function ServiceSidePanel({
   team,
   blastRadius,
   blastRadiusLoading,
+  blastRadiusError,
   onClose,
 }: {
   workspaceId: string;
@@ -31,6 +32,7 @@ export function ServiceSidePanel({
   team: TeamOut | null;
   blastRadius: BlastRadiusOut | undefined;
   blastRadiusLoading: boolean;
+  blastRadiusError: boolean;
   onClose: () => void;
 }): React.JSX.Element {
   const incidentsQuery = useQuery({
@@ -98,6 +100,8 @@ export function ServiceSidePanel({
           </h3>
           {blastRadiusLoading ? (
             <span className="text-muted-foreground">Loading…</span>
+          ) : blastRadiusError ? (
+            <span className="text-destructive">Couldn't load blast radius.</span>
           ) : blastRadius && blastRadius.services.length > 0 ? (
             <ul className="flex flex-col gap-1">
               {blastRadius.services.map((entry) => (
@@ -118,6 +122,8 @@ export function ServiceSidePanel({
           </h3>
           {incidentsQuery.isLoading ? (
             <span className="text-muted-foreground">Loading…</span>
+          ) : incidentsQuery.isError ? (
+            <span className="text-destructive">Couldn't load incident history.</span>
           ) : incidentsQuery.data && incidentsQuery.data.items.length > 0 ? (
             <ul className="flex flex-col gap-2">
               {incidentsQuery.data.items.map((incident) => (
