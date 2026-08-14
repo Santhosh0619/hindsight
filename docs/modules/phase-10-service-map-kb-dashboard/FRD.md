@@ -178,10 +178,11 @@ class DashboardOut(BaseModel):
 ```
 
 ### `app/services/dashboard_service.py` (new)
-`get_dashboard(db, graph_store, *, workspace_id) -> DashboardOut` — five independent
+`get_dashboard(db, graph_store, *, workspace_id) -> DashboardOut` — six independent
 aggregate queries (open incident count, postmortem status counts, brief count, MTTR
-per week bucket, fragile-service ranking) run concurrently where they touch disjoint
-tables, each scoped by `workspace_id`. Fragile-service ranking computes `blast_radius_
+per week bucket, recent briefs, fragile-service ranking) run sequentially against the
+single request-scoped session (see NFR Performance for why — not `asyncio.gather`),
+each scoped by `workspace_id`. Fragile-service ranking computes `blast_radius_
 size` via `graph_store.blast_radius` per service — capped to the workspace's services
 (bounded by catalog size, not incident volume) — and `incident_count` via one grouped
 query across every `IncidentSignal`, not one query per service.
