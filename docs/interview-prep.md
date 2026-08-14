@@ -646,3 +646,70 @@ built-but-unwired for two whole phases until Phase 8 actually had a use for it. 
 checkpointer itself is fully live-verified this phase — a real saver, a real graph run,
 a real read-back of the persisted checkpoint — just not left running inside the app
 with nothing pointed at it.
+
+**Q: Tell me about a real deadlock you found and fixed, not a theoretical one.**
+
+A: Phase 9's brief-generation endpoint hung indefinitely — not slow, genuinely stuck —
+the first time it ever ran against a freshly created database. The cause: the
+checkpointer's one-time setup issues `CREATE INDEX CONCURRENTLY IF NOT EXISTS`, which
+by Postgres's own design has to wait for every transaction open anywhere on the
+database at the moment it starts before it can proceed. The request handling that same
+call had its own database session sitting idle-in-transaction — opened by an
+unrelated `refresh()` after an earlier commit, since SQLAlchemy auto-begins a new
+transaction on the next statement — and that session wouldn't close until the graph run
+finished, which was itself blocked waiting on the index build to finish. Circular wait.
+It never showed up against this project's own dev database because the index already
+existed from earlier manual runs, so the `IF NOT EXISTS` check always skipped the wait
+entirely — only a genuinely fresh database, which only the e2e stack provisions, could
+expose it. I found it by bypassing the browser entirely with a raw Node `fetch()`
+against the SSE endpoint to rule out a client-side cause, then read `pg_stat_activity`
+directly and saw the `CREATE INDEX CONCURRENTLY` call sitting in a `Lock/virtualxid`
+wait next to my own request's session sitting idle in transaction. The fix was moving
+the one-time setup call out of the request path entirely, into the app's startup
+sequence, where no request-scoped session could possibly be open yet.
+
+**Q: How do you debug something that "just hangs" with no error, no stack trace,
+nothing?**
+
+A: Stop trusting the layer you're looking at and cut the number of moving parts. Here
+the failure surfaced through Playwright, so the first move was ruling Playwright out —
+a plain Node `fetch()` against the same endpoint hung identically, which meant the
+browser, the dev server, and the test framework were all innocent, and the problem had
+to be server-side. From there it's `pg_stat_activity`, not application logs, because an
+application that's truly stuck usually isn't logging anything new — the story is in
+what the database thinks is happening *right now*: which queries are running, which are
+idle-in-transaction, and what each one is waiting on. `wait_event_type = Lock` on one
+row next to `idle in transaction` on another, with timestamps close enough together to
+belong to the same request, is what turned "it hangs" into "these two sessions are
+waiting on each other."
+
+**Q: `EventSourceResponse`'s SSE generator needs its own database session instead of
+reusing the request's — why, and how is that different from a normal request handler?**
+
+A: FastAPI's per-request `db` dependency is torn down by its own cleanup as soon as the
+route handler *returns the response object* — for a normal JSON response that's fine,
+because all the work already happened before the return. An `EventSourceResponse` is
+different: the handler returns the response object immediately, and the actual work
+(the generator function) only starts running afterward, as Starlette iterates the
+streaming body. A generator that closed over the request's session would be trying to
+use something that's already been cleaned up. The fix is the generator opening its own
+session scoped to its own lifetime — the same fix Phase 8 needed for a different
+reason (an observer loop racing the graph's own session), which is really the same
+underlying lesson twice: know exactly whose session you're holding and how long it's
+supposed to live, because "the request" and "the work" don't always have the same
+lifetime once streaming responses are involved.
+
+**Q: Why does the API return different schemas than what's stored in the agent
+pipeline's own state?**
+
+A: Because they're different contracts serving different consumers. The graph's
+internal types carry exactly what the graph needs to reason and to persist — mostly
+ids, scores, offsets — because that's cheap to store as JSONB and cheap for the graph's
+own nodes to pass around. None of that is renderable on its own; a UI needs a
+postmortem's actual title, a chunk's actual text, a service's actual name and tier. I
+could have either changed the graph's internal types to carry all of that (which
+ripples into the persisted JSONB and the nodes that build it) or resolved ids into
+content at the API boundary, and resolving at the boundary keeps the graph's contract
+about the graph and the API's contract about the API. It also means a dangling
+reference — a citation pointing at a chunk that's since been deleted — can be dropped
+silently while enriching, instead of taking down the whole response.

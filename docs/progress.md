@@ -746,7 +746,113 @@ against a real graph run, which is what caught this phase's one genuine concurre
 
 Full detail on all findings and design rationale: ADR 0008.
 
-## Phase 9 — Incidents API + The Money Screen — pending
+## Phase 9 — Incidents API + The Money Screen — done, PR open ([PR #10](https://github.com/Santhosh0619/hindsight/pull/10))
+
+Target checkpoint (Master-Prompt.md): file an incident, watch the agent pipeline
+investigate it live, land on a brief with hypotheses, citations, matched postmortems,
+blast radius, and a runbook — the "money screen."
+
+No real LLM key is configured this build session — same standing choice as Phases 6/8.
+Verified three ways: 15 new automated backend tests (up from 135 going into this
+phase — 11 in `test_incidents_api.py`, 3 in `test_incidents_service.py`, 1 in
+`test_enrich_brief.py`) run against the real dev Postgres, including an HTTP-level SSE
+test that drives the real ASGI route rather than the service function directly. 8 new
+frontend tests (`AgentPipelineTrace.test.tsx`, `BriefView.test.tsx`, `sse.test.ts`) via
+`vitest`. **Also** verified with a real automated Playwright e2e suite
+(`e2e/tests/incidents.spec.ts`, 4 tests) against the fully isolated
+`docker-compose.test.yml` stack, and — separately — with a genuine live-browser
+Playwright MCP walkthrough of the full F5→F6→F7 loop before any component tests were
+written, which is what actually surfaced this phase's CRLF SSE-framing bug (below).
+
+| Step | Status | Notes |
+|---|---|---|
+| 1. BRANCH | done | `feat/incidents-api`, created from `main` after Phase 8 merged |
+| 2. READ | done | |
+| 3. EXPLORE | done | Reviewed Phase 8's `TriageState`/`IncidentBrief`/`stream_graph_events`, Phase 4's `get_blast_radius` route (reused later for the blast-radius enrichment gap below), and `Search.tsx`'s React Query convention before writing docs |
+| 4. DOCUMENT | done | `docs/modules/phase-9-incidents-api/{PRD,FRD,NFR}.md` committed before any code; amended twice more mid-phase for the checkpointer-per-call design note and the blast-radius enrichment fix, and once more for the CRLF bug writeup |
+| 5. CODE-BE | done | `app/schemas/incident_api.py`, `app/services/incidents_service.py` (`generate_brief`/`stream_brief_generation`/`_enrich_brief`/`_enrich_blast_radius`), `app/api/v1/incidents.py` (8 endpoints) |
+| 6. TEST-BE | done | `ruff`, `mypy --strict`, `pytest` (150/150) all clean, run inside the `api` container |
+| 7. REVIEW-BE | **APPROVED** | First pass found the SSE session-lifecycle bug (below); fixed and re-verified by tracing the actual object flow through `stream_brief_generation`, not just checking a diff existed → APPROVED, 0/0/0 |
+| 8. CODE-FE | done | `frontend/src/lib/sse.ts`, `components/incidents/{AgentPipelineTrace,BriefView}.tsx`, `pages/{NewIncident,IncidentDetail,IncidentList}.tsx` (F5/F6/F7) |
+| 9. TEST-FE | done | `tsc --noEmit`, `eslint --max-warnings 0`, `prettier --check`, `vitest` (26/26), `vite build` all clean, run inside the `web` container |
+| 10. REVIEW-FE | **APPROVED** | First pass: 3 BLOCKING + 2 WARNING — see below. Fixed all 5; a first re-review caught one NEW bug of the identical class one call further down in the same function that had just been fixed; fixed and a second re-review confirmed it plus a full-file sweep for the same pattern elsewhere → APPROVED, 0 findings |
+| 11. TEST-E2E | done | `e2e/tests/incidents.spec.ts` (4 tests) against `docker-compose.test.yml`, 4/4 passing (16/16 across the full e2e suite). Surfaced a genuine startup-time deadlock in the checkpointer's one-time table/index setup — see below |
+| 12. PUSH | done | `feat/incidents-api` pushed. The pre-push hook's full pytest run flaked once on `test_a_low_critic_score_produces_a_visible_retry_in_the_stream` (a pydantic-ai `FunctionModel` output-retry exhaustion, not a real assertion failure) — reproduced 0/4 times in isolation and passed 150/150 in a clean full-suite run earlier in this session, matching this project's documented shared-dev-DB flake pattern (ADR 0005 §6, ADR 0006 §5), not something this phase's diff touches. Pushed with `--no-verify` per explicit instruction not to block this branch on that; real CI runs the suite against a fresh database and isn't subject to the same shared-state flake |
+| 13. PR | done | [#10](https://github.com/Santhosh0619/hindsight/pull/10) opened against `main` |
+| 14. MERGE | pending | awaiting explicit go-ahead |
+
+### A real deadlock, found only by e2e-testing against a freshly created database
+
+- **`AsyncPostgresSaver.setup()`'s one-time `CREATE INDEX CONCURRENTLY` deadlocked
+  against the calling request's own idle-in-transaction session.** Called once per
+  `generate_brief`/`stream_brief_generation` (matching ADR 0008 §6's restraint against
+  a held-open app-level checkpointer), `setup()`'s index build has to wait for every
+  transaction open anywhere on the database at the moment it starts — including the
+  same request's own session, left mid-transaction by an unrelated `db.refresh()`
+  call and not closed until the graph run (which was itself waiting on `setup()`)
+  finished. Every dev/pytest run against this project's long-lived Postgres never saw
+  it, because the checkpoint tables already existed from earlier manual runs and
+  `IF NOT EXISTS` always short-circuited before the wait could start — only
+  `e2e/tests/incidents.spec.ts` against the always-fresh `db-test` service hit it, on
+  the very first brief-generation call, hanging indefinitely with no error and no
+  stack trace. Diagnosed by bypassing the browser entirely with a raw Node `fetch()`
+  against the SSE endpoint (ruling out Playwright/the dev server), then reading
+  `pg_stat_activity` directly and finding the `CREATE INDEX CONCURRENTLY` call sitting
+  in a `Lock/virtualxid` wait next to the request's own session sitting idle in
+  transaction. Fixed by moving `setup()` out of the request path entirely, into
+  `app/main.py`'s lifespan, where no request-scoped session can possibly be open yet.
+  Verified by rebuilding the e2e stack from a clean `db-test` and confirming all four
+  incident e2e tests now pass in under 7 seconds each, and by re-running the full
+  150-test backend suite clean. See ADR 0009 §1.
+
+### Bugs found only by a genuine live-browser walkthrough (not by tsc/eslint/vitest alone)
+
+- **`sse-starlette` frames SSE events with CRLF, not the bare LF `sse.ts` assumed** —
+  `"\r\n\r\n"` doesn't contain the substring `"\n\n"`, so frame-boundary detection
+  silently never fired and the UI sat on "Investigating…" forever even though the
+  backend log showed the run completing in seconds. Diagnosed via temporary debug
+  logging, confirmed via a direct `python -c` check of `ServerSentEvent.encode()`'s
+  real output inside the `api` container. Fixed by normalizing CRLF to LF right after
+  decoding each chunk; `sse.test.ts` proves it's a real tripwire by having been
+  temporarily reverted and confirmed to fail before being kept. See ADR 0008 (SSE
+  header constraint) and the FRD's Gap #3.
+
+### Bugs found only by the code-reviewer sub-agent (not by any tool)
+
+- **`stream_brief`'s SSE generator closed over the request-scoped `db` dependency**,
+  which FastAPI's own cleanup closes as soon as the handler returns the response
+  object — before Starlette starts iterating the streaming body. Fixed by having the
+  generator open its own session scoped to its own lifetime. See ADR 0009 §2.
+- **`NewIncident.tsx`'s `submit()` had no error handling around `createIncident`**,
+  and **`IncidentDetail.tsx`'s `load()` had no error handling around its
+  `Promise.all`** — both left the UI stuck in a loading/generating state forever on
+  any failure. **`IncidentList.tsx` had no error handling at all.** Fixed the first
+  two with try/catch/finally into existing error states; migrated the third to
+  `useQuery`/`useInfiniteQuery` (matching `Search.tsx`'s Phase 7 precedent), which
+  provides `isLoading`/`isError` for free.
+- A first re-review, verifying the above fixes by reading the code rather than
+  trusting the commit message, caught a **second, identical bug one call further
+  down in `NewIncident.tsx`**: the `done`-event handler's `listBriefs(...).then(...)`
+  still had no `.catch()`. Fixed; a second re-review confirmed it and swept the rest
+  of `frontend/src` for the same unguarded-`.then()` pattern, finding none.
+
+### Design decisions worth noting
+
+- `BriefOut.blast_radius` reuses Phase 4's `BlastRadiusOut`/`BlastRadiusEntryOut`,
+  not Phase 8's internal ids-only `graph_store.BlastRadius` — caught by re-reading
+  Phase 4's own `get_blast_radius` route before writing any frontend code, avoiding a
+  rework cycle. See ADR 0009 §3 and FRD Gap #5.
+- Citation deep-linking (`char_start`/`char_end`) resolves and returns offsets now,
+  but the actual scroll-and-highlight UI is deferred to Phase 10's Knowledge Base
+  page — this phase's citation chips show the cited chunk's own content inline
+  instead, which is the grounding excerpt either way. See FRD Gap #1.
+- Native `EventSource` can't send the `Authorization: Bearer` header this app's auth
+  model relies on, so F5/F6 consume SSE via `fetch()` + a hand-rolled reader instead
+  of the browser's built-in `EventSource`. See FRD Gap #3.
+
+Full detail on all findings and design rationale: ADR 0009.
+
+## Phase 10 — Service Map, Knowledge Base, Dashboard — pending
 ## Phase 10 — Service Map, Knowledge Base, Dashboard — pending
 ## Phase 11 — Seed Corpus & Demo Mode — pending
 ## Phase 12 — Evaluation Harness — pending

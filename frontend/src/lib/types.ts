@@ -1,6 +1,6 @@
-// Hand-kept in sync with backend/app/schemas/{auth,workspace,postmortem,search}.py —
-// no codegen in this phase (see docs/modules/phase-3-frontend-foundation/NFR.md
-// "Constraints").
+// Hand-kept in sync with backend/app/schemas/{auth,workspace,postmortem,search,
+// catalog,incident_api}.py — no codegen in this phase (see
+// docs/modules/phase-3-frontend-foundation/NFR.md "Constraints").
 
 export type WorkspaceRole = "owner" | "responder" | "viewer";
 
@@ -44,6 +44,11 @@ export interface ApiErrorBody {
     message: string;
     detail: unknown;
   };
+}
+
+export interface CursorPage<T> {
+  items: T[];
+  next_cursor: string | null;
 }
 
 export type Severity = "sev1" | "sev2" | "sev3" | "sev4";
@@ -97,3 +102,136 @@ export interface SearchResponseOut {
   mode: SearchMode;
   timings_ms: Record<string, number>;
 }
+
+// --- Catalog (Phase 4, first frontend consumer this phase) ---
+
+export type ServiceTier = 1 | 2 | 3;
+
+export interface ServiceOut {
+  id: string;
+  name: string;
+  tier: ServiceTier;
+  team_id: string | null;
+  repo_url: string | null;
+  description: string | null;
+  runbook_url: string | null;
+}
+
+export interface BlastRadiusEntryOut {
+  service: ServiceOut;
+  score: number;
+  path: ServiceOut[];
+  depth: number;
+}
+
+export interface BlastRadiusOut {
+  services: BlastRadiusEntryOut[];
+}
+
+// --- Incidents (Phase 9) ---
+
+export type IncidentStatus = "open" | "mitigated" | "resolved" | "false_positive";
+export type FeedbackVerdict = "helpful" | "partially" | "unhelpful";
+
+export interface IncidentOut {
+  id: string;
+  workspace_id: string;
+  external_ref: string | null;
+  title: string;
+  raw_alert_text: string;
+  severity: Severity | null;
+  status: IncidentStatus;
+  opened_by: string | null;
+  opened_at: string;
+  resolved_at: string | null;
+  created_at: string;
+}
+
+export interface IncidentCreate {
+  title: string;
+  raw_alert_text: string;
+  external_ref?: string;
+  severity?: Severity;
+}
+
+export interface IncidentUpdate {
+  status?: IncidentStatus;
+  title?: string;
+}
+
+export interface CitationOut {
+  chunk_id: string;
+  postmortem_id: string;
+  postmortem_title: string;
+  quote: string | null;
+  content: string;
+  char_start: number;
+  char_end: number;
+}
+
+export interface HypothesisOut {
+  statement: string;
+  confidence: number;
+  citations: CitationOut[];
+}
+
+export interface RunbookStepOut {
+  step: string;
+  source_postmortem_id: string | null;
+  citation: CitationOut | null;
+}
+
+export interface MatchedPostmortemOut {
+  postmortem: PostmortemOut;
+  vector_score: number;
+  keyword_score: number;
+  graph_score: number;
+  failure_mode_overlap: number;
+  recency: number;
+  overall_score: number;
+  rank: number;
+}
+
+export interface BriefOut {
+  id: string;
+  incident_id: string;
+  version: number;
+  hypotheses: HypothesisOut[];
+  matched_postmortems: MatchedPostmortemOut[];
+  blast_radius: BlastRadiusOut;
+  runbook_steps: RunbookStepOut[];
+  citations: CitationOut[];
+  overall_confidence: number | null;
+  correction_passes: number;
+  llm_used: boolean;
+  from_cache: boolean;
+  generated_at: string | null;
+}
+
+export interface BriefFeedbackCreate {
+  verdict: FeedbackVerdict;
+  correct_postmortem_id?: string;
+  note?: string;
+}
+
+export interface BriefFeedbackOut {
+  id: string;
+  brief_id: string;
+  user_id: string | null;
+  verdict: FeedbackVerdict;
+  correct_postmortem_id: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+// SSE events from GET /incidents/{id}/brief/stream (app/agents/streaming.py's
+// stream_graph_events shapes, wrapped by /lib/sse.ts).
+export type AgentNodeName =
+  "normalizer" | "retriever" | "correlator" | "analyst" | "critic" | "briefer";
+
+export type AgentStreamEvent =
+  | { type: "node_start"; node: AgentNodeName }
+  | { type: "node_end"; node: AgentNodeName; latency_ms: number }
+  | { type: "retry" }
+  | { type: "done"; brief_id: string | null }
+  | { type: "error"; message: string };
