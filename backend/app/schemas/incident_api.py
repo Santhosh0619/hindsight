@@ -5,8 +5,8 @@ from pydantic import BaseModel
 
 from app.models.incident import FeedbackVerdict, IncidentStatus
 from app.models.postmortem import Severity
+from app.schemas.catalog import BlastRadiusOut
 from app.schemas.postmortem import PostmortemOut
-from app.services.graph_store import BlastRadius
 
 
 class IncidentCreate(BaseModel):
@@ -76,7 +76,7 @@ class BriefOut(BaseModel):
     version: int
     hypotheses: list[HypothesisOut]
     matched_postmortems: list[MatchedPostmortemOut]
-    blast_radius: BlastRadius
+    blast_radius: BlastRadiusOut
     runbook_steps: list[RunbookStepOut]
     citations: list[CitationOut]
     overall_confidence: float | None

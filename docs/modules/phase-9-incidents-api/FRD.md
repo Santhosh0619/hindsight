@@ -34,6 +34,16 @@
    freshly compiled graph and its own checkpointer connection — no app-level singleton,
    consistent with Phase 8's own documented restraint (ADR 0008 §6) not to hold a
    checkpointer open with no request behind it.
+5. **`BriefOut.blast_radius` reuses Phase 4's `BlastRadiusOut`/`BlastRadiusEntryOut`
+   (`app/schemas/catalog.py`), not Phase 8's internal `graph_store.BlastRadius`.**
+   Phase 8's `BlastRadiusEntry` only carries `service_id`s — exactly right for state
+   threaded through the graph, useless for F6's panel, which needs each service's
+   name/tier the way plan.md's F6 spec describes ("ordered downstream services with
+   tier..."). Phase 4 already solved this exact resolution problem for its own
+   `GET /services/{id}/blast-radius` endpoint (`catalog_service.get_services_by_ids`
+   batch-resolving every referenced id, root and path alike); `_enrich_blast_radius`
+   in `incidents_service.py` reuses that same resolution shape instead of inventing a
+   parallel one.
 
 ## API Endpoints (Backend — FastAPI)
 
@@ -131,7 +141,7 @@ class BriefOut(BaseModel):
     id: UUID; incident_id: UUID; version: int
     hypotheses: list[HypothesisOut]
     matched_postmortems: list[MatchedPostmortemOut]
-    blast_radius: BlastRadius  # reused from app/services/graph_store.py
+    blast_radius: BlastRadiusOut  # reused from app/schemas/catalog.py, resolved names/tiers
     runbook_steps: list[RunbookStepOut]
     citations: list[CitationOut]
     overall_confidence: float | None; correction_passes: int

@@ -142,7 +142,9 @@ async def list_briefs(
     db: DbSession,
 ) -> list[BriefOut]:
     await incidents_service.get_incident(db, workspace_id, incident_id)
-    return await incidents_service.list_briefs(db, incident_id=incident_id)
+    return await incidents_service.list_briefs(
+        db, incident_id=incident_id, workspace_id=workspace_id
+    )
 
 
 @router.post(

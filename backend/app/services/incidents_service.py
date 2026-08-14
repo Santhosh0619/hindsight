@@ -17,6 +17,7 @@ from app.core.pagination import decode_cursor, encode_cursor
 from app.models.agent import AgentRun
 from app.models.incident import Brief, BriefFeedback, Incident, IncidentSignal, IncidentStatus
 from app.models.postmortem import Postmortem, PostmortemChunk
+from app.schemas.catalog import BlastRadiusEntryOut, BlastRadiusOut, ServiceOut
 from app.schemas.incident import CandidateMatch, Citation, Hypothesis, RunbookStepDraft
 from app.schemas.incident_api import (
     BriefFeedbackCreate,
@@ -30,6 +31,7 @@ from app.schemas.incident_api import (
     RunbookStepOut,
 )
 from app.schemas.postmortem import PostmortemOut
+from app.services import catalog_service
 from app.services.graph_store import BlastRadius, GraphStore
 from app.services.llm.router import LLMRouter
 
@@ -128,11 +130,15 @@ async def get_brief(db: AsyncSession, *, incident_id: uuid.UUID, brief_id: uuid.
     return brief
 
 
-async def list_briefs(db: AsyncSession, *, incident_id: uuid.UUID) -> list[BriefOut]:
+async def list_briefs(
+    db: AsyncSession, *, incident_id: uuid.UUID, workspace_id: uuid.UUID
+) -> list[BriefOut]:
     result = await db.execute(
         select(Brief).where(Brief.incident_id == incident_id).order_by(Brief.version.desc())
     )
-    return [await _enrich_brief(db, row) for row in result.scalars().all()]
+    return [
+        await _enrich_brief(db, row, workspace_id=workspace_id) for row in result.scalars().all()
+    ]
 
 
 async def record_feedback(
@@ -208,7 +214,7 @@ async def generate_brief(
     )
     brief_row = await db.get(Brief, brief.id)
     assert brief_row is not None
-    return await _enrich_brief(db, brief_row)
+    return await _enrich_brief(db, brief_row, workspace_id=incident.workspace_id)
 
 
 async def stream_brief_generation(
@@ -243,12 +249,40 @@ async def stream_brief_generation(
         logger.info("brief_generation_completed", incident_id=str(incident.id), status=status)
 
 
-async def _enrich_brief(db: AsyncSession, brief_row: Brief) -> BriefOut:
+async def _enrich_blast_radius(
+    db: AsyncSession, blast_radius: BlastRadius, *, workspace_id: uuid.UUID
+) -> BlastRadiusOut:
+    # Mirrors app/api/v1/catalog.py's get_blast_radius route exactly -- Phase 8's
+    # graph_store.BlastRadius only carries service ids; the API response needs the
+    # resolved name/tier a human (or F6's blast radius panel) actually reads.
+    referenced_ids = {entry.service_id for entry in blast_radius.entries}
+    for entry in blast_radius.entries:
+        referenced_ids.update(entry.path.service_ids)
+    services_by_id = await catalog_service.get_services_by_ids(
+        db, workspace_id, list(referenced_ids)
+    )
+
+    entries = [
+        BlastRadiusEntryOut(
+            service=ServiceOut.model_validate(services_by_id[entry.service_id]),
+            score=entry.score,
+            path=[ServiceOut.model_validate(services_by_id[sid]) for sid in entry.path.service_ids],
+            depth=entry.depth,
+        )
+        for entry in blast_radius.entries
+        if entry.service_id in services_by_id
+        and all(sid in services_by_id for sid in entry.path.service_ids)
+    ]
+    return BlastRadiusOut(services=entries)
+
+
+async def _enrich_brief(db: AsyncSession, brief_row: Brief, *, workspace_id: uuid.UUID) -> BriefOut:
     hypotheses = [Hypothesis.model_validate(h) for h in brief_row.hypotheses]
     matched = [CandidateMatch.model_validate(c) for c in brief_row.matched_postmortems]
     runbook_steps = [RunbookStepDraft.model_validate(s) for s in brief_row.runbook_steps]
     citations = [Citation.model_validate(c) for c in brief_row.citations]
     blast_radius = BlastRadius.model_validate(brief_row.blast_radius)
+    blast_radius_out = await _enrich_blast_radius(db, blast_radius, workspace_id=workspace_id)
 
     chunk_ids: set[uuid.UUID] = {c.chunk_id for c in citations}
     for hypothesis in hypotheses:
@@ -336,7 +370,7 @@ async def _enrich_brief(db: AsyncSession, brief_row: Brief) -> BriefOut:
         version=brief_row.version,
         hypotheses=hypotheses_out,
         matched_postmortems=matched_out,
-        blast_radius=blast_radius,
+        blast_radius=blast_radius_out,
         runbook_steps=runbook_steps_out,
         citations=citations_out,
         overall_confidence=brief_row.overall_confidence,

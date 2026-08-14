@@ -127,7 +127,7 @@ async def test_enrich_brief_drops_a_hypothesis_whose_only_citation_no_longer_res
     db.add(brief_row)
     await db.commit()
 
-    enriched = await _enrich_brief(db, brief_row)
+    enriched = await _enrich_brief(db, brief_row, workspace_id=workspace_id)
 
     assert len(enriched.hypotheses) == 1
     assert enriched.hypotheses[0].statement == "grounded claim"
