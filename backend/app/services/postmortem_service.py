@@ -163,30 +163,26 @@ async def get_postmortem_detail(
 ) -> PostmortemDetailOut:
     postmortem = await get_postmortem(db, workspace_id, postmortem_id)
     chunks = await list_chunks(db, postmortem_id)
-    chunk_span_by_id = {c.id: (c.char_start, c.char_end) for c in chunks}
 
+    # source_chunk_id is a real, enforced FK (ON DELETE CASCADE) -- a fact can never
+    # outlive its chunk, so joining straight to the chunk for its offsets needs no
+    # "what if it's missing" branch the way Phase 9's JSONB-stored citations do.
     facts_result = await db.execute(
-        select(PostmortemFact).where(PostmortemFact.postmortem_id == postmortem_id)
+        select(PostmortemFact, PostmortemChunk)
+        .join(PostmortemChunk, PostmortemChunk.id == PostmortemFact.source_chunk_id)
+        .where(PostmortemFact.postmortem_id == postmortem_id)
     )
-    facts: list[PostmortemFactOut] = []
-    for fact in facts_result.scalars().all():
-        # A fact whose source chunk no longer resolves is dropped, not raised --
-        # same "dangling reference is silently omitted" rule as Phase 9's
-        # _enrich_brief.
-        span = chunk_span_by_id.get(fact.source_chunk_id)
-        if span is None:
-            continue
-        char_start, char_end = span
-        facts.append(
-            PostmortemFactOut(
-                fact_type=fact.fact_type,
-                statement=fact.statement,
-                confidence=fact.confidence,
-                source_chunk_id=fact.source_chunk_id,
-                char_start=char_start,
-                char_end=char_end,
-            )
+    facts = [
+        PostmortemFactOut(
+            fact_type=fact.fact_type,
+            statement=fact.statement,
+            confidence=fact.confidence,
+            source_chunk_id=fact.source_chunk_id,
+            char_start=chunk.char_start,
+            char_end=chunk.char_end,
         )
+        for fact, chunk in facts_result.all()
+    ]
 
     affected_by_id = await _affected_services_by_postmortem_id(
         db, workspace_id=workspace_id, postmortem_ids=[postmortem_id]
