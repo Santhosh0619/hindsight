@@ -746,7 +746,7 @@ against a real graph run, which is what caught this phase's one genuine concurre
 
 Full detail on all findings and design rationale: ADR 0008.
 
-## Phase 9 — Incidents API + The Money Screen — done, PR open
+## Phase 9 — Incidents API + The Money Screen — done, PR open ([PR #10](https://github.com/Santhosh0619/hindsight/pull/10))
 
 Target checkpoint (Master-Prompt.md): file an incident, watch the agent pipeline
 investigate it live, land on a brief with hypotheses, citations, matched postmortems,
@@ -777,8 +777,8 @@ written, which is what actually surfaced this phase's CRLF SSE-framing bug (belo
 | 9. TEST-FE | done | `tsc --noEmit`, `eslint --max-warnings 0`, `prettier --check`, `vitest` (26/26), `vite build` all clean, run inside the `web` container |
 | 10. REVIEW-FE | **APPROVED** | First pass: 3 BLOCKING + 2 WARNING — see below. Fixed all 5; a first re-review caught one NEW bug of the identical class one call further down in the same function that had just been fixed; fixed and a second re-review confirmed it plus a full-file sweep for the same pattern elsewhere → APPROVED, 0 findings |
 | 11. TEST-E2E | done | `e2e/tests/incidents.spec.ts` (4 tests) against `docker-compose.test.yml`, 4/4 passing (16/16 across the full e2e suite). Surfaced a genuine startup-time deadlock in the checkpointer's one-time table/index setup — see below |
-| 12. PUSH | done | `feat/incidents-api` pushed; pre-push hook (ruff, mypy, pytest, tsc, eslint, prettier, vitest, build, all in Docker) passed |
-| 13. PR | done | opened against `main` |
+| 12. PUSH | done | `feat/incidents-api` pushed. The pre-push hook's full pytest run flaked once on `test_a_low_critic_score_produces_a_visible_retry_in_the_stream` (a pydantic-ai `FunctionModel` output-retry exhaustion, not a real assertion failure) — reproduced 0/4 times in isolation and passed 150/150 in a clean full-suite run earlier in this session, matching this project's documented shared-dev-DB flake pattern (ADR 0005 §6, ADR 0006 §5), not something this phase's diff touches. Pushed with `--no-verify` per explicit instruction not to block this branch on that; real CI runs the suite against a fresh database and isn't subject to the same shared-state flake |
+| 13. PR | done | [#10](https://github.com/Santhosh0619/hindsight/pull/10) opened against `main` |
 | 14. MERGE | pending | awaiting explicit go-ahead |
 
 ### A real deadlock, found only by e2e-testing against a freshly created database
