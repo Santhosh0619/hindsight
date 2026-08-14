@@ -3,13 +3,17 @@ import { Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/layout/AppShell";
 import { ProtectedRoute } from "@/lib/auth";
 import { SCREENS } from "@/lib/screens";
+import { Dashboard } from "@/pages/Dashboard";
 import { IncidentDetail } from "@/pages/IncidentDetail";
 import { IncidentList } from "@/pages/IncidentList";
+import { KnowledgeBase } from "@/pages/KnowledgeBase";
 import { Landing } from "@/pages/Landing";
 import { Login } from "@/pages/Login";
 import { NewIncident } from "@/pages/NewIncident";
 import { Onboarding } from "@/pages/Onboarding";
+import { PostmortemDetail } from "@/pages/PostmortemDetail";
 import { Search } from "@/pages/Search";
+import { ServiceMap } from "@/pages/ServiceMap";
 import { Signup } from "@/pages/Signup";
 import { StubRoute } from "@/pages/StubRoute";
 
@@ -19,6 +23,9 @@ const IMPLEMENTED_PAGES: Partial<Record<string, React.ComponentType>> = {
   "/search": Search,
   "/incidents/new": NewIncident,
   "/incidents": IncidentList,
+  "/service-map": ServiceMap,
+  "/knowledge-base": KnowledgeBase,
+  "/dashboard": Dashboard,
 };
 
 export function AppRoutes(): React.JSX.Element {
@@ -39,6 +46,9 @@ export function AppRoutes(): React.JSX.Element {
           {/* F6 Incident Detail -- contextual route reached from F7, not a sidebar
               entry (see lib/screens.ts's own comment on why it's absent from SCREENS). */}
           <Route path="/incidents/:id" element={<IncidentDetail />} />
+          {/* Postmortem detail -- contextual route reached from F8's table, same
+              pattern as Incident Detail above. */}
+          <Route path="/knowledge-base/:id" element={<PostmortemDetail />} />
         </Route>
       </Route>
     </Routes>

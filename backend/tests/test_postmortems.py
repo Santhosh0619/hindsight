@@ -1,12 +1,32 @@
 import contextlib
+import uuid
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.postmortem import (
+    FactType,
+    PostmortemChunk,
+    PostmortemFact,
+    PostmortemService,
+    ServiceLinkRole,
+)
 from app.workers import queue
 from app.workers.handlers.ingest_postmortem import handle_ingest_postmortem
 from tests.conftest import auth_headers, signup
+
+
+async def _create_service(client: AsyncClient, token: str, workspace_id: str, name: str) -> str:
+    response = await client.post(
+        f"/api/v1/workspaces/{workspace_id}/catalog/services",
+        json={"name": name, "tier": 1},
+        headers=auth_headers(token),
+    )
+    assert response.status_code == 201, response.text
+    service_id: str = response.json()["id"]
+    return service_id
 
 
 async def _workspace_id(client: AsyncClient, token: str) -> str:
@@ -297,3 +317,112 @@ async def test_raw_text_over_size_cap_is_rejected(client: AsyncClient) -> None:
         headers=auth_headers(token),
     )
     assert response.status_code == 422
+
+
+async def test_freshly_created_postmortem_has_no_affected_services(client: AsyncClient) -> None:
+    owner = await signup(client)
+    token = owner["access_token"]
+    workspace_id = await _workspace_id(client, token)
+
+    response = await client.post(
+        f"/api/v1/workspaces/{workspace_id}/postmortems",
+        json={"title": "pm", "raw_text": "Summary:\nSomething broke.\n"},
+        headers=auth_headers(token),
+    )
+    assert response.json()["affected_services"] == []
+
+
+async def test_affected_services_are_batch_resolved_on_list_and_detail(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    # No LLM key is configured in this build (standing choice since Phase 6), so
+    # extraction always dead-letters -- PostmortemService rows are inserted directly,
+    # the same approach Phase 9's test_enrich_brief.py used for citations.
+    owner = await signup(client)
+    token = owner["access_token"]
+    workspace_id = await _workspace_id(client, token)
+    service_id = await _create_service(client, token, workspace_id, "checkout-api")
+
+    create_response = await client.post(
+        f"/api/v1/workspaces/{workspace_id}/postmortems",
+        json={"title": "pm", "raw_text": "Summary:\nSomething broke.\n"},
+        headers=auth_headers(token),
+    )
+    postmortem_id = create_response.json()["id"]
+
+    db.add(
+        PostmortemService(
+            postmortem_id=uuid.UUID(postmortem_id),
+            service_id=uuid.UUID(service_id),
+            role=ServiceLinkRole.ROOT_CAUSE,
+            confidence=0.9,
+        )
+    )
+    await db.commit()
+
+    list_response = await client.get(
+        f"/api/v1/workspaces/{workspace_id}/postmortems", headers=auth_headers(token)
+    )
+    [row] = list_response.json()["items"]
+    assert len(row["affected_services"]) == 1
+    assert row["affected_services"][0]["service"]["id"] == service_id
+    assert row["affected_services"][0]["service"]["name"] == "checkout-api"
+    assert row["affected_services"][0]["role"] == "root_cause"
+    assert row["affected_services"][0]["confidence"] == 0.9
+
+    detail_response = await client.get(
+        f"/api/v1/workspaces/{workspace_id}/postmortems/{postmortem_id}",
+        headers=auth_headers(token),
+    )
+    detail = detail_response.json()
+    assert detail["affected_services"][0]["service"]["id"] == service_id
+    assert detail["affected_services"][0]["role"] == "root_cause"
+
+
+async def test_facts_resolve_offsets_from_their_source_chunk(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    owner = await signup(client)
+    token = owner["access_token"]
+    workspace_id = await _workspace_id(client, token)
+
+    create_response = await client.post(
+        f"/api/v1/workspaces/{workspace_id}/postmortems",
+        json={
+            "title": "pm",
+            "raw_text": "Summary:\nA bad deploy exhausted the connection pool.\n",
+        },
+        headers=auth_headers(token),
+    )
+    postmortem_id = create_response.json()["id"]
+    await _run_pending_ingestion_jobs(db)
+
+    chunk_result = await db.execute(
+        select(PostmortemChunk).where(PostmortemChunk.postmortem_id == uuid.UUID(postmortem_id))
+    )
+    chunk = chunk_result.scalars().first()
+    assert chunk is not None
+
+    db.add(
+        PostmortemFact(
+            postmortem_id=uuid.UUID(postmortem_id),
+            fact_type=FactType.ROOT_CAUSE,
+            statement="A bad deploy exhausted the connection pool",
+            confidence=0.8,
+            source_chunk_id=chunk.id,
+        )
+    )
+    await db.commit()
+
+    detail_response = await client.get(
+        f"/api/v1/workspaces/{workspace_id}/postmortems/{postmortem_id}",
+        headers=auth_headers(token),
+    )
+    detail = detail_response.json()
+    assert len(detail["facts"]) == 1
+    fact = detail["facts"][0]
+    assert fact["fact_type"] == "root_cause"
+    assert fact["char_start"] == chunk.char_start
+    assert fact["char_end"] == chunk.char_end
+    assert detail["redacted_text"] is not None
+    assert detail["redacted_text"][fact["char_start"] : fact["char_end"]] == chunk.content

@@ -3,16 +3,25 @@ import type {
   AgentStreamEvent,
   ApiErrorBody,
   AuthResponse,
+  BlastRadiusOut,
   BriefFeedbackCreate,
   BriefFeedbackOut,
   BriefOut,
+  CatalogGraphOut,
+  CursorPage,
+  DashboardOut,
   IncidentCreate,
   IncidentOut,
   IncidentStatus,
   IncidentUpdate,
+  PostmortemCreate,
+  PostmortemDetailOut,
+  PostmortemOut,
+  PostmortemStatus,
   SearchMode,
   SearchResponseOut,
   ServiceOut,
+  TeamOut,
 } from "@/lib/types";
 
 export const API_BASE_URL: string =
@@ -150,6 +159,73 @@ export async function search(
 
 export async function listServices(workspaceId: string): Promise<ServiceOut[]> {
   return apiFetch<ServiceOut[]>(`/api/v1/workspaces/${workspaceId}/catalog/services`);
+}
+
+export async function listTeams(workspaceId: string): Promise<TeamOut[]> {
+  return apiFetch<TeamOut[]>(`/api/v1/workspaces/${workspaceId}/catalog/teams`);
+}
+
+export async function getGraph(workspaceId: string): Promise<CatalogGraphOut> {
+  return apiFetch<CatalogGraphOut>(`/api/v1/workspaces/${workspaceId}/catalog/graph`);
+}
+
+export async function getBlastRadius(
+  workspaceId: string,
+  serviceId: string
+): Promise<BlastRadiusOut> {
+  return apiFetch(`/api/v1/workspaces/${workspaceId}/catalog/services/${serviceId}/blast-radius`);
+}
+
+export async function createPostmortem(
+  workspaceId: string,
+  payload: PostmortemCreate
+): Promise<PostmortemOut> {
+  return apiFetch<PostmortemOut>(`/api/v1/workspaces/${workspaceId}/postmortems`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export interface ListPostmortemsParams {
+  status?: PostmortemStatus;
+  cursor?: string;
+  limit?: number;
+}
+
+export async function listPostmortems(
+  workspaceId: string,
+  params: ListPostmortemsParams = {}
+): Promise<CursorPage<PostmortemOut>> {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) query.set(key, String(value));
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiFetch(`/api/v1/workspaces/${workspaceId}/postmortems${suffix}`);
+}
+
+export async function getPostmortem(
+  workspaceId: string,
+  postmortemId: string
+): Promise<PostmortemDetailOut> {
+  return apiFetch<PostmortemDetailOut>(
+    `/api/v1/workspaces/${workspaceId}/postmortems/${postmortemId}`
+  );
+}
+
+export async function getPostmortemStatus(
+  workspaceId: string,
+  postmortemId: string
+): Promise<{
+  status: PostmortemStatus;
+  injection_flagged: boolean;
+  failure_reason: string | null;
+}> {
+  return apiFetch(`/api/v1/workspaces/${workspaceId}/postmortems/${postmortemId}/status`);
+}
+
+export async function getDashboard(workspaceId: string): Promise<DashboardOut> {
+  return apiFetch<DashboardOut>(`/api/v1/workspaces/${workspaceId}/dashboard`);
 }
 
 export async function createIncident(
