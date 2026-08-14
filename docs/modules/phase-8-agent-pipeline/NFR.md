@@ -44,9 +44,14 @@
 
 ## Observability
 
-- `structlog` events: `agent_run_started`/`agent_run_completed` (with `incident_id`,
-  `llm_used`, `correction_passes`, total latency) bracketing a full graph invocation,
-  matching every prior phase's completion-logging pattern.
+- `agent_run_started`/`agent_run_completed` structlog events, bracketing a full graph
+  invocation with `incident_id`/`llm_used`/`correction_passes`/total latency, are
+  **deferred to Phase 9** — this phase has no single invocation entrypoint of its own
+  (`build_graph.py` only builds/compiles; nothing here calls `ainvoke`), the same
+  shape as Phase 6's `extraction_service.py`, whose own completion log lives one layer
+  up in the worker handler that calls it, not in the service module itself. Phase 9's
+  `incidents_service.generate_brief` is this graph's first real caller and where that
+  bracketing belongs.
 - `agent_run_steps` rows (written by `streaming.py`) are this phase's detailed
   per-node audit trail — inspectable independent of the structured logs, and exactly
   what Phase 9's SSE stream and F5's live pipeline visualization will read from.

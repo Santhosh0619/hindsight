@@ -168,9 +168,11 @@ fields — dependencies aren't state.
 
 1. **`normalizer_node`** — `router.structured(raw_text, system=..., result_type=
    IncidentSignalOut)`. Resolves `candidate_service_names` against
-   `catalog_service.list_services(db, workspace_id)` (case-insensitive exact match on
-   `Service.name`, mirroring Phase 6's `service_linker_agent` resolution pattern exactly
-   — matched names become `affected_service_ids`, unmatched ones go to
+   `catalog_service.list_services(db, workspace_id)` (case-sensitive exact match on
+   `Service.name`, mirroring Phase 6's real `service_linker_agent`/`extraction_service.py`
+   resolution — `service_id_by_name.get(link.service_name)` — exactly, not an idealized
+   case-insensitive version of it) — matched names become `affected_service_ids`, unmatched
+   ones go to
    `unresolved_mentions`, never invented into a fake id). Persists an `IncidentSignal`
    row (`symptoms` JSONB stores `{"items": [...], "severity_guess": ...,
    "unresolved_mentions": [...]}` since the DB column has no dedicated columns for the
@@ -312,9 +314,18 @@ caller.
 
 ```python
 async def stream_graph_events(
-    graph: CompiledStateGraph, state: TriageState, *, thread_id: str, db: AsyncSession, run_id: uuid.UUID
+    graph: CompiledStateGraph, state: TriageState, *, thread_id: str, run_id: uuid.UUID
 ) -> AsyncIterator[dict[str, object]]:
 ```
+
+No `db` parameter, deliberately — `astream_events` runs the graph as its own concurrent
+task while this generator's body consumes events, so an `AgentRunStep` write sharing a
+session with whatever the graph's nodes are bound to raced against the nodes' own
+queries (`This session is provisioning a new connection; concurrent operations are not
+permitted`), the same class of bug ADR 0007 §1 documents for Phase 7's concurrent
+retrievers — caught only by actually running a real graph through the real streaming
+wrapper, not by reasoning about the design. Each `AgentRunStep` write opens its own
+fresh session via `get_session_factory()` instead.
 
 Wraps `graph.astream_events(state, config={"configurable": {"thread_id": thread_id}},
 version="v2")`, filtering to `on_chain_start`/`on_chain_end` events whose `name` matches

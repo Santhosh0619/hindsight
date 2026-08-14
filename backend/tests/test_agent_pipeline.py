@@ -242,6 +242,16 @@ async def test_a_low_critic_score_triggers_exactly_one_retry(
         if (e["node"] if isinstance(e, dict) else e.node) == "retriever"
     ]
     assert len(retriever_runs) == 2
+    # AC-3: the retry's query differs from the original -- suggested_refinements got
+    # folded in, verifiable via the retry's own hybrid_search call (surfaced in trace).
+    first_note = (
+        retriever_runs[0]["note"] if isinstance(retriever_runs[0], dict) else retriever_runs[0].note
+    )
+    second_note = (
+        retriever_runs[1]["note"] if isinstance(retriever_runs[1], dict) else retriever_runs[1].note
+    )
+    assert first_note != second_note
+    assert "pool exhaustion" in second_note
 
 
 async def test_graph_completes_with_deterministic_content_when_no_llm_is_available(
