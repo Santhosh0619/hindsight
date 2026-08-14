@@ -30,6 +30,8 @@ services:
       # same root cause as ADR 0002 §5's httpx test-client fix, here for real-browser
       # e2e instead of vitest.
       COOKIE_SECURE: "false"
+    volumes:
+      - model-cache:/root/.cache/huggingface
     depends_on:
       db-test:
         condition: service_healthy
@@ -46,6 +48,23 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+
+  worker-test:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db-test:5432/hindsight_e2e
+      JWT_SECRET: e2e-test-secret-not-for-production
+      DEMO_MODE: "true"
+      LLM_API_KEY: ""
+    volumes:
+      - model-cache:/root/.cache/huggingface
+    depends_on:
+      db-test:
+        condition: service_healthy
+    command: python -m app.workers.worker
 
   web-test:
     build:
@@ -65,3 +84,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+
+volumes:
+  # Same volume name as docker-compose.yml's dev stack -- both resolve to the same
+  # Compose project (directory-based naming), so this reuses the already-downloaded
+  # embedding model instead of redownloading it for every e2e run.
+  model-cache:
