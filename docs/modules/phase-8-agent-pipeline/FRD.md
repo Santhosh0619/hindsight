@@ -287,15 +287,26 @@ def build_graph(db, graph_store, router) -> CompiledStateGraph:
     return graph
 ```
 
-`build_checkpointer(settings) -> AsyncPostgresSaver` converts `Settings.database_url`
+`checkpointer_conn_string(settings) -> str` converts `Settings.database_url`
 (`postgresql+asyncpg://...`, SQLAlchemy's driver-qualified form) to the plain
 `postgresql://...` DSN `AsyncPostgresSaver.from_conn_string` requires (confirmed live
 against this project's real dev Postgres this phase — see the ADR) — a one-line
 `str.replace`, not a new settings field, since it's a mechanical format conversion of an
-existing value, not new configuration. `graph.compile(checkpointer=saver)` happens once
-at startup (`app/main.py`'s lifespan, alongside `saver.setup()`), matching Master-Prompt.
-md's "compiled once at startup"; `config={"configurable": {"thread_id": str(incident_id)}}`
-is passed at invocation time so the checkpointer keys state by incident, not globally.
+existing value, not new configuration. `config={"configurable": {"thread_id":
+str(incident_id)}}` is passed at invocation time so the checkpointer keys state by
+incident, not globally.
+
+**Not wired into `app/main.py`'s lifespan this phase, deliberately.** `AsyncPostgresSaver
+.from_conn_string` is an async context manager — holding one open for the app's entire
+lifetime with no current caller (Phase 9's incidents API doesn't exist yet) would add a
+second Postgres connection pool and a `setup()` round-trip to every test that boots the
+app via the ASGI test client, for zero benefit today — the same restraint this codebase
+already applied to the LLM router (lazy provider construction) and the semantic cache
+(built in Phase 6, wired to its real caller only once one existed, per ADR 0006 §2).
+Phase 8's own verification (`build_graph`/`checkpointer_conn_string` used directly
+inside a script/test fixture) needs no app-level wiring at all; compiling the graph once
+at FastAPI startup happens in Phase 9, whose incidents API is this graph's first real
+caller.
 
 ## `app/agents/streaming.py`
 
