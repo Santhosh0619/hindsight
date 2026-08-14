@@ -29,6 +29,7 @@ export function IncidentDetail(): React.JSX.Element {
   const [incident, setIncident] = React.useState<IncidentOut | null>(null);
   const [brief, setBrief] = React.useState<BriefOut | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState(false);
   const [generating, setGenerating] = React.useState(false);
   const [events, setEvents] = React.useState<AgentStreamEvent[]>([]);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
@@ -37,13 +38,19 @@ export function IncidentDetail(): React.JSX.Element {
   const load = React.useCallback(async () => {
     if (!workspaceId || !id) return;
     setLoading(true);
-    const [incidentData, briefs] = await Promise.all([
-      getIncident(workspaceId, id),
-      listBriefs(workspaceId, id),
-    ]);
-    setIncident(incidentData);
-    setBrief(briefs[0] ?? null);
-    setLoading(false);
+    setLoadError(false);
+    try {
+      const [incidentData, briefs] = await Promise.all([
+        getIncident(workspaceId, id),
+        listBriefs(workspaceId, id),
+      ]);
+      setIncident(incidentData);
+      setBrief(briefs[0] ?? null);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
   }, [workspaceId, id]);
 
   React.useEffect(() => {
@@ -79,6 +86,14 @@ export function IncidentDetail(): React.JSX.Element {
 
   if (!workspaceId || !id || loading) {
     return <LoadingSkeleton lines={6} />;
+  }
+  if (loadError) {
+    return (
+      <EmptyState
+        title="Couldn't load this incident"
+        description="Something went wrong fetching it. Try refreshing the page."
+      />
+    );
   }
   if (!incident) {
     return <EmptyState title="Incident not found" />;

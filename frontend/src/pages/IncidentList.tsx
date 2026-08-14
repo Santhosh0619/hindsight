@@ -1,3 +1,4 @@
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import * as React from "react";
 import { Link } from "react-router-dom";
 
@@ -11,7 +12,7 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { Timestamp } from "@/components/ui/timestamp";
 import { listIncidents, listServices } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import type { IncidentOut, IncidentStatus, ServiceOut, Severity } from "@/lib/types";
+import type { IncidentOut, IncidentStatus, Severity } from "@/lib/types";
 
 const STATUSES: IncidentStatus[] = ["open", "mitigated", "resolved", "false_positive"];
 const SEVERITIES: Severity[] = ["sev1", "sev2", "sev3", "sev4"];
@@ -29,36 +30,33 @@ export function IncidentList(): React.JSX.Element {
   const [status, setStatus] = React.useState<IncidentStatus | "">("");
   const [severity, setSeverity] = React.useState<Severity | "">("");
   const [serviceId, setServiceId] = React.useState("");
-  const [services, setServices] = React.useState<ServiceOut[]>([]);
-  const [items, setItems] = React.useState<IncidentOut[]>([]);
-  const [nextCursor, setNextCursor] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(true);
 
-  React.useEffect(() => {
-    if (!workspaceId) return;
-    void listServices(workspaceId).then(setServices);
-  }, [workspaceId]);
+  const servicesQuery = useQuery({
+    queryKey: ["catalog-services", workspaceId],
+    queryFn: () => listServices(workspaceId as string),
+    enabled: Boolean(workspaceId),
+  });
 
-  const fetchPage = React.useCallback(
-    async (cursor: string | null, append: boolean): Promise<void> => {
-      if (!workspaceId) return;
-      setLoading(true);
-      const page = await listIncidents(workspaceId, {
+  // useInfiniteQuery, not a hand-rolled useState+useEffect -- the queryKey already
+  // includes every filter, so changing one automatically starts a fresh query at
+  // page one instead of appending onto stale results, and loading/error states come
+  // from the query itself rather than needing their own hand-tracked booleans.
+  const incidentsQuery = useInfiniteQuery({
+    queryKey: ["incidents", workspaceId, status, severity, serviceId],
+    queryFn: ({ pageParam }) =>
+      listIncidents(workspaceId as string, {
         status: status || undefined,
         severity: severity || undefined,
         service_id: serviceId || undefined,
-        cursor: cursor || undefined,
-      });
-      setItems((prev) => (append ? [...prev, ...page.items] : page.items));
-      setNextCursor(page.next_cursor);
-      setLoading(false);
-    },
-    [workspaceId, status, severity, serviceId]
-  );
+        cursor: pageParam ?? undefined,
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.next_cursor,
+    enabled: Boolean(workspaceId),
+  });
 
-  React.useEffect(() => {
-    void fetchPage(null, false);
-  }, [fetchPage]);
+  const items: IncidentOut[] = incidentsQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const services = servicesQuery.data ?? [];
 
   return (
     <>
@@ -105,8 +103,13 @@ export function IncidentList(): React.JSX.Element {
         </select>
       </div>
 
-      {loading && items.length === 0 ? (
+      {incidentsQuery.isLoading ? (
         <LoadingSkeleton lines={5} />
+      ) : incidentsQuery.isError ? (
+        <EmptyState
+          title="Couldn't load incidents"
+          description="Something went wrong fetching the list. Try again."
+        />
       ) : items.length === 0 ? (
         <EmptyState title="No incidents match these filters" />
       ) : (
@@ -130,12 +133,12 @@ export function IncidentList(): React.JSX.Element {
         </div>
       )}
 
-      {nextCursor ? (
+      {incidentsQuery.hasNextPage ? (
         <div className="mt-4">
           <Button
             variant="outline"
-            disabled={loading}
-            onClick={() => void fetchPage(nextCursor, true)}
+            disabled={incidentsQuery.isFetchingNextPage}
+            onClick={() => void incidentsQuery.fetchNextPage()}
           >
             Load more
           </Button>

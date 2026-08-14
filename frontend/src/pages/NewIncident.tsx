@@ -3,11 +3,12 @@ import { useNavigate } from "react-router-dom";
 
 import { AgentPipelineTrace } from "@/components/incidents/AgentPipelineTrace";
 import { BriefView } from "@/components/incidents/BriefView";
+import { EmptyState } from "@/components/layout/EmptyState";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createIncident, listBriefs, streamBrief } from "@/lib/api";
-import { useAuth } from "@/lib/auth";
+import { useAuth, useRequireRole } from "@/lib/auth";
 import type { AgentStreamEvent, BriefOut } from "@/lib/types";
 
 const SAMPLE_ALERTS = [
@@ -23,6 +24,7 @@ type Phase = "idle" | "generating" | "done" | "error";
 export function NewIncident(): React.JSX.Element {
   const { currentMembership } = useAuth();
   const workspaceId = currentMembership?.workspace_id ?? null;
+  const canWrite = useRequireRole("owner", "responder");
   const navigate = useNavigate();
 
   const [alertText, setAlertText] = React.useState("");
@@ -42,10 +44,17 @@ export function NewIncident(): React.JSX.Element {
     setBrief(null);
     setErrorMessage(null);
 
-    const incident = await createIncident(workspaceId, {
-      title: alertText.trim().slice(0, 120),
-      raw_alert_text: alertText.trim(),
-    });
+    let incident: Awaited<ReturnType<typeof createIncident>>;
+    try {
+      incident = await createIncident(workspaceId, {
+        title: alertText.trim().slice(0, 120),
+        raw_alert_text: alertText.trim(),
+      });
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+      setPhase("error");
+      return;
+    }
     setIncidentId(incident.id);
 
     abortRef.current = streamBrief(
@@ -69,6 +78,18 @@ export function NewIncident(): React.JSX.Element {
       }
     );
   };
+
+  if (!canWrite) {
+    return (
+      <>
+        <PageHeader title="New Incident" />
+        <EmptyState
+          title="Read-only access"
+          description="Ask an owner or responder to file a new incident."
+        />
+      </>
+    );
+  }
 
   return (
     <>
