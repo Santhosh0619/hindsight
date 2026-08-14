@@ -156,7 +156,7 @@ async def test_hybrid_mode_reports_accurate_source_attribution(
 
     body = response.json()
     assert body["mode"] == "hybrid"
-    assert set(body["timings_ms"]) == {"vector", "keyword", "graph"}
+    assert set(body["timings_ms"]) == {"vector", "keyword", "graph", "fusion"}
 
     graph_result = next(r for r in body["results"] if r["postmortem"]["id"] == fixture["graph_pm"])
     sources = {s["source"] for s in graph_result["sources"]}
@@ -173,6 +173,22 @@ async def test_empty_query_is_rejected(client: AsyncClient) -> None:
     response = await client.get(
         f"/api/v1/workspaces/{workspace_id}/search",
         params={"q": ""},
+        headers=auth_headers(token),
+    )
+
+    assert response.status_code == 422
+
+
+async def test_whitespace_only_query_is_rejected(client: AsyncClient) -> None:
+    owner = await signup(client)
+    token = owner["access_token"]
+    workspace_id = await _workspace_id(client, token)
+
+    # "   " passes FastAPI's own min_length=1 check (length 3), so this specifically
+    # exercises the route's own strip-and-check rather than Pydantic's Query validator.
+    response = await client.get(
+        f"/api/v1/workspaces/{workspace_id}/search",
+        params={"q": "   "},
         headers=auth_headers(token),
     )
 
@@ -220,3 +236,53 @@ async def test_search_never_returns_another_workspaces_postmortems(
     assert response.status_code == 200
     result_ids = {r["postmortem"]["id"] for r in response.json()["results"]}
     assert pm_a not in result_ids
+
+
+async def test_graph_and_hybrid_mode_never_leak_across_workspaces_with_same_service_name(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    owner_a = await signup(client)
+    owner_b = await signup(client)
+    token_a = owner_a["access_token"]
+    token_b = owner_b["access_token"]
+    workspace_a = await _workspace_id(client, token_a)
+    workspace_b = await _workspace_id(client, token_b)
+
+    # Both workspaces independently name a service "shared-svc" -- distinct rows,
+    # same name, the realistic near-miss case for a workspace_id-scoping bug.
+    service_a = await client.post(
+        f"/api/v1/workspaces/{workspace_a}/catalog/services",
+        json={"name": "shared-svc", "tier": 1},
+        headers=auth_headers(token_a),
+    )
+    await client.post(
+        f"/api/v1/workspaces/{workspace_b}/catalog/services",
+        json={"name": "shared-svc", "tier": 1},
+        headers=auth_headers(token_b),
+    )
+
+    pm_a = await _ingest(
+        client,
+        db,
+        token=token_a,
+        workspace_id=workspace_a,
+        raw_text="Summary:\nshared-svc had an outage in workspace A.\n",
+    )
+    db.add(
+        PostmortemService(
+            postmortem_id=uuid.UUID(pm_a),
+            service_id=uuid.UUID(service_a.json()["id"]),
+            role=ServiceLinkRole.ROOT_CAUSE,
+        )
+    )
+    await db.commit()
+
+    for mode in ("graph", "hybrid"):
+        response = await client.get(
+            f"/api/v1/workspaces/{workspace_b}/search",
+            params={"q": "shared-svc", "mode": mode},
+            headers=auth_headers(token_b),
+        )
+        assert response.status_code == 200, response.text
+        result_ids = {r["postmortem"]["id"] for r in response.json()["results"]}
+        assert pm_a not in result_ids
