@@ -12,7 +12,6 @@ from app.agents.normalizer_agent import extract_signal
 from app.agents.state import TraceEntry, TriageState
 from app.core.config import get_settings
 from app.core.errors import LLMUnavailableError
-from app.core.logging import get_logger
 from app.models.incident import Brief, BriefStatus
 from app.models.incident import IncidentSignal as IncidentSignalRow
 from app.models.postmortem import FailureMode, PostmortemFailureMode
@@ -28,8 +27,6 @@ from app.services.graph_store import GraphStore
 from app.services.llm import cache as semantic_cache
 from app.services.llm.router import LLMRouter
 from app.services.retrieval.hybrid import hybrid_search
-
-logger = get_logger(__name__)
 
 _CACHE_PURPOSE = "analyst_brief"
 
@@ -269,7 +266,26 @@ async def critic_node(state: TriageState, *, router: LLMRouter) -> dict[str, obj
             "trace": [*state["trace"], trace],
         }
 
-    judgment = await judge_verification(router, signal=signal, draft=cleaned_draft)
+    try:
+        judgment = await judge_verification(router, signal=signal, draft=cleaned_draft)
+    except LLMUnavailableError:
+        verification = VerificationResult(
+            score=1.0,
+            is_grounded=True,
+            issues=["LLM became unavailable -- brief is deterministic-only"],
+            suggested_refinements=[],
+            invalid_citations=invalid_citations,
+        )
+        trace = TraceEntry(
+            node="critic", note="LLM became unavailable -- pass-through verification"
+        )
+        return {
+            "draft": cleaned_draft,
+            "verification": verification,
+            "llm_used": False,
+            "trace": [*state["trace"], trace],
+        }
+
     verification = VerificationResult(
         score=judgment.score,
         is_grounded=judgment.is_grounded,
@@ -310,7 +326,27 @@ async def briefer_node(state: TriageState, *, db: AsyncSession) -> dict[str, obj
     )
     next_version = max([v for (v,) in existing_versions], default=0) + 1
 
+    brief_row = Brief(
+        incident_id=state["incident_id"],
+        version=next_version,
+        status=BriefStatus.READY,
+        hypotheses=[h.model_dump(mode="json") for h in draft.hypotheses],
+        matched_postmortems=[c.model_dump(mode="json") for c in candidates],
+        blast_radius=blast_radius.model_dump(mode="json"),
+        runbook_steps=[s.model_dump(mode="json") for s in draft.runbook_steps],
+        page_list=[],
+        citations=[c.model_dump(mode="json") for c in draft.citations],
+        overall_confidence=overall_confidence,
+        correction_passes=state["retry_count"],
+        llm_used=state["llm_used"],
+        from_cache=state["from_cache"],
+        generated_at=datetime.now(UTC),
+    )
+    db.add(brief_row)
+    await db.commit()
+
     brief = IncidentBrief(
+        id=brief_row.id,
         incident_id=state["incident_id"],
         version=next_version,
         hypotheses=draft.hypotheses,
@@ -323,26 +359,6 @@ async def briefer_node(state: TriageState, *, db: AsyncSession) -> dict[str, obj
         llm_used=state["llm_used"],
         from_cache=state["from_cache"],
     )
-
-    db.add(
-        Brief(
-            incident_id=state["incident_id"],
-            version=next_version,
-            status=BriefStatus.READY,
-            hypotheses=[h.model_dump(mode="json") for h in draft.hypotheses],
-            matched_postmortems=[c.model_dump(mode="json") for c in candidates],
-            blast_radius=blast_radius.model_dump(mode="json"),
-            runbook_steps=[s.model_dump(mode="json") for s in draft.runbook_steps],
-            page_list=[],
-            citations=[c.model_dump(mode="json") for c in draft.citations],
-            overall_confidence=overall_confidence,
-            correction_passes=state["retry_count"],
-            llm_used=state["llm_used"],
-            from_cache=state["from_cache"],
-            generated_at=datetime.now(UTC),
-        )
-    )
-    await db.commit()
 
     trace = TraceEntry(node="briefer", note=f"brief v{next_version} persisted")
     return {"final": brief, "trace": [*state["trace"], trace]}

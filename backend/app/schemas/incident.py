@@ -96,6 +96,7 @@ class VerificationResult(BaseModel):
 
 
 class IncidentBrief(BaseModel):
+    id: uuid.UUID
     incident_id: uuid.UUID
     version: int
     hypotheses: list[Hypothesis]
