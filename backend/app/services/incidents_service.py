@@ -187,8 +187,10 @@ async def generate_brief(
     status = "done"
     try:
         conn_string = checkpointer_conn_string(settings)
+        # Table/index setup runs once at app startup (main.py's lifespan), not here --
+        # see that comment for why running it per-request against a session that's
+        # mid-transaction for the whole graph run is a real deadlock, not just waste.
         async with AsyncPostgresSaver.from_conn_string(conn_string) as saver:
-            await saver.setup()
             graph = build_graph(db, graph_store, router, checkpointer=saver)
             state = initial_state(
                 incident_id=incident.id,
@@ -227,8 +229,8 @@ async def stream_brief_generation(
     status = "done"
     try:
         conn_string = checkpointer_conn_string(settings)
+        # Table/index setup runs once at app startup -- see generate_brief's comment.
         async with AsyncPostgresSaver.from_conn_string(conn_string) as saver:
-            await saver.setup()
             graph = build_graph(db, graph_store, router, checkpointer=saver)
             state = initial_state(
                 incident_id=incident.id,

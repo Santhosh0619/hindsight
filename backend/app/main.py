@@ -3,8 +3,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from sqlalchemy import text
 
+from app.agents.build_graph import checkpointer_conn_string
 from app.api.v1.auth import router as auth_router
 from app.api.v1.catalog import router as catalog_router
 from app.api.v1.incidents import router as incidents_router
@@ -27,6 +29,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     configure_logging()
     engine = get_engine()
     await ensure_vector_extension(engine)
+    # AsyncPostgresSaver.setup() issues CREATE INDEX CONCURRENTLY, which blocks until
+    # every transaction open anywhere on the database at the time it starts has
+    # ended. Running it here, before any request-scoped session can be mid-transaction,
+    # avoids a real deadlock: a brief-generation request's own session sits inside an
+    # open (SQLAlchemy-autobegun) transaction for the duration of the graph run, and
+    # setup() run from that same request would wait on a transaction that can't
+    # finish until setup() returns. The checkpoint tables/indexes only need creating
+    # once per database, so this is a one-time cost at boot, not per-request.
+    async with AsyncPostgresSaver.from_conn_string(
+        checkpointer_conn_string(get_settings())
+    ) as saver:
+        await saver.setup()
     logger.info("app_startup", llm_configured=get_settings().llm_configured)
     yield
     await dispose_engine()
