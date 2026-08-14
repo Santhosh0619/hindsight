@@ -21,6 +21,7 @@ const POSTMORTEM = {
   injection_flagged: false,
   failure_reason: null,
   created_at: "2026-01-01T00:00:00Z",
+  affected_services: [],
 };
 
 const CITATION = {

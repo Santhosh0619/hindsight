@@ -9,7 +9,6 @@ from app.models.postmortem import PostmortemStatus
 from app.models.workspace import WorkspaceRole
 from app.schemas.postmortem import (
     PostmortemBulkCreate,
-    PostmortemChunkOut,
     PostmortemCreate,
     PostmortemDetailOut,
     PostmortemOut,
@@ -61,12 +60,10 @@ async def list_postmortems(
     cursor: Annotated[str | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> CursorPage[PostmortemOut]:
-    rows, next_cursor = await postmortem_service.list_postmortems(
+    items, next_cursor = await postmortem_service.list_postmortems(
         db, workspace_id=workspace_id, status=status_filter, cursor=cursor, limit=limit
     )
-    return CursorPage[PostmortemOut](
-        items=[PostmortemOut.model_validate(r) for r in rows], next_cursor=next_cursor
-    )
+    return CursorPage[PostmortemOut](items=items, next_cursor=next_cursor)
 
 
 @router.get("/{postmortem_id}", response_model=PostmortemDetailOut)
@@ -76,12 +73,7 @@ async def get_postmortem(
     membership: CurrentWorkspaceMember,
     db: DbSession,
 ) -> PostmortemDetailOut:
-    postmortem = await postmortem_service.get_postmortem(db, workspace_id, postmortem_id)
-    chunks = await postmortem_service.list_chunks(db, postmortem_id)
-    return PostmortemDetailOut(
-        **PostmortemOut.model_validate(postmortem).model_dump(),
-        chunks=[PostmortemChunkOut.model_validate(c) for c in chunks],
-    )
+    return await postmortem_service.get_postmortem_detail(db, workspace_id, postmortem_id)
 
 
 @router.get("/{postmortem_id}/status", response_model=PostmortemStatusOut)

@@ -55,6 +55,21 @@ export type Severity = "sev1" | "sev2" | "sev3" | "sev4";
 export type PostmortemStatus = "pending" | "processing" | "indexed" | "failed";
 export type ServiceLinkRole = "root_cause" | "affected" | "downstream";
 
+export interface PostmortemCreate {
+  title: string;
+  raw_text: string;
+  external_ref?: string;
+  occurred_at?: string;
+  duration_minutes?: number;
+  severity?: Severity;
+}
+
+export interface PostmortemServiceLinkOut {
+  service: ServiceOut;
+  role: ServiceLinkRole;
+  confidence: number | null;
+}
+
 export interface PostmortemOut {
   id: string;
   external_ref: string | null;
@@ -66,6 +81,34 @@ export interface PostmortemOut {
   injection_flagged: boolean;
   failure_reason: string | null;
   created_at: string;
+  affected_services: PostmortemServiceLinkOut[];
+}
+
+export type FactType =
+  "trigger" | "root_cause" | "remediation" | "detection_gap" | "contributing_factor";
+
+export interface PostmortemFactOut {
+  fact_type: FactType;
+  statement: string;
+  confidence: number | null;
+  source_chunk_id: string;
+  char_start: number;
+  char_end: number;
+}
+
+export interface PostmortemChunkOut {
+  id: string;
+  chunk_index: number;
+  section_label: string | null;
+  content: string;
+  char_start: number;
+  char_end: number;
+}
+
+export interface PostmortemDetailOut extends PostmortemOut {
+  chunks: PostmortemChunkOut[];
+  redacted_text: string | null;
+  facts: PostmortemFactOut[];
 }
 
 export type SearchMode = "hybrid" | "vector" | "keyword" | "graph";
@@ -126,6 +169,29 @@ export interface BlastRadiusEntryOut {
 
 export interface BlastRadiusOut {
   services: BlastRadiusEntryOut[];
+}
+
+export interface TeamOut {
+  id: string;
+  name: string;
+  slack_handle: string | null;
+  escalation_contact: string | null;
+}
+
+export type EdgeKind = "calls" | "reads_from" | "publishes_to" | "depends_on";
+export type EdgeCriticality = "hard" | "soft";
+
+export interface EdgeOut {
+  id: string;
+  from_service_id: string;
+  to_service_id: string;
+  kind: EdgeKind;
+  criticality: EdgeCriticality;
+}
+
+export interface CatalogGraphOut {
+  nodes: ServiceOut[];
+  edges: EdgeOut[];
 }
 
 // --- Incidents (Phase 9) ---
@@ -235,3 +301,43 @@ export type AgentStreamEvent =
   | { type: "retry" }
   | { type: "done"; brief_id: string | null }
   | { type: "error"; message: string };
+
+// --- Dashboard (Phase 10) ---
+
+export interface IngestHealthOut {
+  indexed: number;
+  processing: number;
+  pending: number;
+  failed: number;
+}
+
+export interface MttrPointOut {
+  week_start: string;
+  mttr_minutes: number | null;
+}
+
+export interface FragileServiceOut {
+  service: ServiceOut;
+  incident_count: number;
+  blast_radius_size: number;
+  fragility_score: number;
+}
+
+export interface RecentBriefOut {
+  incident_id: string;
+  incident_title: string;
+  brief_id: string;
+  version: number;
+  overall_confidence: number | null;
+  generated_at: string | null;
+}
+
+export interface DashboardOut {
+  open_incidents: number;
+  briefs_generated: number;
+  corpus_size: number;
+  ingest_health: IngestHealthOut;
+  mttr_trend: MttrPointOut[];
+  fragile_services: FragileServiceOut[];
+  recent_briefs: RecentBriefOut[];
+}

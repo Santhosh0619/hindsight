@@ -4,7 +4,8 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.config import get_settings
-from app.models.postmortem import PostmortemStatus, Severity
+from app.models.postmortem import FactType, PostmortemStatus, ServiceLinkRole, Severity
+from app.schemas.catalog import ServiceOut
 
 MAX_BULK_POSTMORTEMS = 20
 
@@ -30,6 +31,12 @@ class PostmortemBulkCreate(BaseModel):
     items: list[PostmortemCreate] = Field(min_length=1, max_length=MAX_BULK_POSTMORTEMS)
 
 
+class PostmortemServiceLinkOut(BaseModel):
+    service: ServiceOut
+    role: ServiceLinkRole
+    confidence: float | None
+
+
 class PostmortemOut(BaseModel):
     id: uuid.UUID
     external_ref: str | None
@@ -41,6 +48,11 @@ class PostmortemOut(BaseModel):
     injection_flagged: bool
     failure_reason: str | None
     created_at: datetime
+    # Defaulted, not required -- most call sites (search results, matched-postmortem
+    # cards in a brief) validate this straight off the ORM row via from_attributes and
+    # have no reason to resolve affected-service links; only Knowledge Base's own
+    # list/detail views (postmortem_service.py) populate it with real data.
+    affected_services: list[PostmortemServiceLinkOut] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -56,8 +68,19 @@ class PostmortemChunkOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PostmortemFactOut(BaseModel):
+    fact_type: FactType
+    statement: str
+    confidence: float | None
+    source_chunk_id: uuid.UUID
+    char_start: int
+    char_end: int
+
+
 class PostmortemDetailOut(PostmortemOut):
     chunks: list[PostmortemChunkOut]
+    redacted_text: str | None
+    facts: list[PostmortemFactOut]
 
 
 class PostmortemStatusOut(BaseModel):
