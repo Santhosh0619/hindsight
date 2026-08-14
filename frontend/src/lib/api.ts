@@ -1,4 +1,19 @@
-import type { ApiErrorBody, AuthResponse, SearchMode, SearchResponseOut } from "@/lib/types";
+import { streamSse } from "@/lib/sse";
+import type {
+  AgentStreamEvent,
+  ApiErrorBody,
+  AuthResponse,
+  BriefFeedbackCreate,
+  BriefFeedbackOut,
+  BriefOut,
+  IncidentCreate,
+  IncidentOut,
+  IncidentStatus,
+  IncidentUpdate,
+  SearchMode,
+  SearchResponseOut,
+  ServiceOut,
+} from "@/lib/types";
 
 export const API_BASE_URL: string =
   (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000";
@@ -131,4 +146,108 @@ export async function search(
   return apiFetch<SearchResponseOut>(
     `/api/v1/workspaces/${workspaceId}/search?${query.toString()}`
   );
+}
+
+export async function listServices(workspaceId: string): Promise<ServiceOut[]> {
+  return apiFetch<ServiceOut[]>(`/api/v1/workspaces/${workspaceId}/catalog/services`);
+}
+
+export async function createIncident(
+  workspaceId: string,
+  payload: IncidentCreate
+): Promise<IncidentOut> {
+  return apiFetch<IncidentOut>(`/api/v1/workspaces/${workspaceId}/incidents`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export interface ListIncidentsParams {
+  status?: IncidentStatus;
+  severity?: string;
+  service_id?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export async function listIncidents(
+  workspaceId: string,
+  params: ListIncidentsParams = {}
+): Promise<{ items: IncidentOut[]; next_cursor: string | null }> {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) query.set(key, String(value));
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiFetch(`/api/v1/workspaces/${workspaceId}/incidents${suffix}`);
+}
+
+export async function getIncident(workspaceId: string, incidentId: string): Promise<IncidentOut> {
+  return apiFetch<IncidentOut>(`/api/v1/workspaces/${workspaceId}/incidents/${incidentId}`);
+}
+
+export async function updateIncident(
+  workspaceId: string,
+  incidentId: string,
+  payload: IncidentUpdate
+): Promise<IncidentOut> {
+  return apiFetch<IncidentOut>(`/api/v1/workspaces/${workspaceId}/incidents/${incidentId}`, {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export async function generateBrief(workspaceId: string, incidentId: string): Promise<BriefOut> {
+  return apiFetch<BriefOut>(`/api/v1/workspaces/${workspaceId}/incidents/${incidentId}/brief`, {
+    method: "POST",
+  });
+}
+
+export async function listBriefs(workspaceId: string, incidentId: string): Promise<BriefOut[]> {
+  return apiFetch<BriefOut[]>(`/api/v1/workspaces/${workspaceId}/incidents/${incidentId}/briefs`);
+}
+
+export async function submitFeedback(
+  workspaceId: string,
+  incidentId: string,
+  briefId: string,
+  payload: BriefFeedbackCreate
+): Promise<BriefFeedbackOut> {
+  return apiFetch<BriefFeedbackOut>(
+    `/api/v1/workspaces/${workspaceId}/incidents/${incidentId}/brief/${briefId}/feedback`,
+    { method: "POST", body: payload }
+  );
+}
+
+// Drives F5/F6's live pipeline visualization from the real SSE stream (never a
+// timer-faked animation, per the FRD). Returns an abort function the caller can use
+// to cancel the stream (e.g. on unmount).
+export function streamBrief(
+  workspaceId: string,
+  incidentId: string,
+  onEvent: (event: AgentStreamEvent) => void,
+  onError: (error: Error) => void
+): () => void {
+  const controller = new AbortController();
+
+  void streamSse(
+    `${API_BASE_URL}/api/v1/workspaces/${workspaceId}/incidents/${incidentId}/brief/stream`,
+    {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    },
+    (frame) => {
+      try {
+        onEvent(JSON.parse(frame.data) as AgentStreamEvent);
+      } catch {
+        // A malformed frame is a protocol bug, not a user-facing error -- drop it
+        // rather than tearing down an otherwise-healthy stream over one bad frame.
+      }
+    },
+    controller.signal
+  ).catch((error: unknown) => {
+    if (controller.signal.aborted) return;
+    onError(error instanceof Error ? error : new Error(String(error)));
+  });
+
+  return () => controller.abort();
 }

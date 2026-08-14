@@ -25,7 +25,17 @@
    credential leak risk — URLs get logged) or switching this app's whole auth model,
    F5/F6 consume the SSE stream via `fetch()` + a hand-rolled reader
    (`frontend/src/lib/sse.ts`), which supports arbitrary headers exactly like every
-   other API call this app already makes.
+   other API call this app already makes. **Caught only by an actual live-browser
+   run, not by any tool:** `sse_starlette.event.ServerSentEvent.encode()` frames
+   events with CRLF (`b'event: done\r\ndata: {...}\r\n\r\n'`), not the bare LF the
+   first version of this parser assumed. `"\r\n\r\n"` doesn't contain the substring
+   `"\n\n"`, so splitting on `"\n\n"` alone never found a frame boundary at all — every
+   event just accumulated silently in the buffer forever, and the UI sat on
+   "Investigating…" indefinitely even though the backend log showed the run completing
+   in a few seconds. `tsc`/`eslint`/`prettier`/`vitest` were all clean throughout,
+   because nothing in this repo's test suite actually drove a real fetch stream against
+   a real `EventSourceResponse` byte-for-byte — see NFR Testability. Fixed by
+   normalizing CRLF to LF immediately after decoding each chunk.
 4. **Both `POST .../brief` (FR-04) and `GET .../brief/stream` (FR-05) run the same
    underlying graph invocation** — factored so both call through the same
    `incidents_service` construction of `(graph_store, router, checkpointer, graph)`,
