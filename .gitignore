@@ -54,6 +54,7 @@ htmlcov/
 .coverage
 coverage.xml
 junit*.xml
+.playwright-mcp/
 
 # Docker
 *.log

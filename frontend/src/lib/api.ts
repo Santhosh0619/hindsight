@@ -1,4 +1,4 @@
-import type { ApiErrorBody, AuthResponse } from "@/lib/types";
+import type { ApiErrorBody, AuthResponse, SearchMode, SearchResponseOut } from "@/lib/types";
 
 export const API_BASE_URL: string =
   (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000";
@@ -116,4 +116,19 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   }
 
   return (await response.json()) as T;
+}
+
+// Query-string construction lives here, not inline at each call site, since search
+// has more params than a typical GET this app has made so far (q, mode, limit).
+export async function search(
+  workspaceId: string,
+  params: { q: string; mode: SearchMode; limit?: number }
+): Promise<SearchResponseOut> {
+  const query = new URLSearchParams({ q: params.q, mode: params.mode });
+  if (params.limit !== undefined) {
+    query.set("limit", String(params.limit));
+  }
+  return apiFetch<SearchResponseOut>(
+    `/api/v1/workspaces/${workspaceId}/search?${query.toString()}`
+  );
 }
