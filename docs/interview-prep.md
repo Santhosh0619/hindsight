@@ -713,3 +713,71 @@ content at the API boundary, and resolving at the boundary keeps the graph's con
 about the graph and the API's contract about the API. It also means a dangling
 reference — a citation pointing at a chunk that's since been deleted — can be dropped
 silently while enriching, instead of taking down the whole response.
+
+**Q: Why build your own layout algorithm for the service map instead of using a graph
+visualization library?**
+
+A: Two reasons, and only one of them is "no paid library." The bigger one is that the
+obvious alternative — a force-directed physics simulation — is actually the wrong tool
+for what this needed. It's non-deterministic between renders, which makes it basically
+untestable in any meaningful way: you can't assert "node A ends up left of node B"
+against a system that's allowed to settle differently each time. What I actually needed
+was much simpler than "looks organic" — the acceptance bar was "handles 40 nodes
+without stutter," which is a layout problem, not a physics problem. So I built a
+layered layout: each service's layer is the length of its longest path from a root,
+computed with a greedy topological placement that always makes progress even when the
+graph has cycles, because it just treats an unplaced predecessor as a back-edge once
+that predecessor's turn comes up. Same graph in, same layout out, every time, and I can
+unit test it directly against a chain, a diamond, and a cycle without rendering
+anything.
+
+**Q: How do you know your layout algorithm actually handles cycles instead of just not
+crashing on one?**
+
+A: Two separate guarantees, and I made sure to test both instead of assuming one
+implies the other. Termination is structural: every iteration of the placement loop
+removes exactly one node from the remaining set, so it always finishes in exactly
+`|nodes|` steps no matter what the edges look like — there's no path through the code
+that could loop forever. That's a "doesn't crash" guarantee. Correctness is a separate
+question — does a 3-node cycle actually get sensible layers, not just *some* layers —
+and that's what the cycle test in `graph-layout.test.ts` checks explicitly: every node
+gets a defined, finite layer. I also added a 40-node/60-edge fixture at the scale the
+seed corpus is actually going to hit, because a cycle test with 3 nodes proves the
+algorithm is correct, not that it's fast enough at real scale — those are different
+claims and I wanted both covered, not just the one that's easier to write.
+
+**Q: Tell me about a bug your own test suite caught by *failing to compile*, not by
+failing an assertion.**
+
+A: Postmortem facts have their evidence located by a `source_chunk_id` foreign key, and
+my first draft resolved a fact's highlight offsets through a lookup dict with a branch
+that silently dropped any fact whose chunk "no longer resolves" — I'd copied that
+pattern directly from how Phase 9 handles citations, which really do need that
+defensive branch because they're stored as JSONB with no database-level guarantee.
+When I went to write the test for postmortem facts — insert a fact with a made-up
+`source_chunk_id`, assert it gets dropped — the insert itself failed a foreign-key
+constraint before the test logic ever ran. That's when it clicked: `source_chunk_id`
+is a real, enforced FK with cascade delete, so a fact literally cannot outlive its
+chunk. The branch I'd written was handling a case that's structurally impossible, which
+is exactly what this codebase's own convention says not to do. I deleted it and joined
+the two tables directly instead. The lesson isn't "the database saved me" so much as
+"the two similar-looking pieces of data — citations and facts — had different real
+guarantees, and copying a pattern without checking whether the guarantee actually holds
+here would have left dead code sitting in a code path indefinitely."
+
+**Q: What's the actual failure mode you found during frontend review this phase, and
+why didn't you catch it while implementing?**
+
+A: The service map's error handling didn't distinguish "the catalog fetch failed" from
+"this is a genuinely empty, freshly-onboarded workspace" — both rendered the exact same
+empty state, with no way for a user to tell "nothing here yet" apart from "something's
+broken, try again." I'd built the other two screens this same phase — Knowledge Base
+and the dashboard — with that distinction from the start, closely following a pattern
+already established in Phase 9's incident pages. The service map just didn't get the
+same treatment, and the reason is almost certainly the mundane one: it was the first of
+the three I built, before the loading/error/empty pattern had fully crystallized into
+"this is just what every page here does." That's specifically the kind of
+inconsistency-between-similar-things that's hard to catch by rereading your own code —
+you already know what you meant, so a gap reads as intentional. A second pass with
+fresh eyes caught it immediately by comparing the three pages against each other, not
+against some abstract checklist.

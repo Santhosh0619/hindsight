@@ -852,8 +852,118 @@ written, which is what actually surfaced this phase's CRLF SSE-framing bug (belo
 
 Full detail on all findings and design rationale: ADR 0009.
 
-## Phase 10 — Service Map, Knowledge Base, Dashboard — pending
-## Phase 10 — Service Map, Knowledge Base, Dashboard — pending
+## Phase 10 — Service Map, Knowledge Base, Dashboard — done, PR open
+
+Target checkpoint (Master-Prompt.md): all three screens work against seeded data and
+are usable on a laptop screen without horizontal scrolling.
+
+No real LLM key is configured this build session — same standing choice as every phase
+since Phase 6, so extraction never populates real facts/affected-services in this
+environment; both degrade to their documented honest-empty states. Phase 11 (the real
+40/80/12-item seed corpus) doesn't exist yet, so this phase's own verification — same
+precedent as every pre-Phase-11 phase — used small hand-built fixtures created directly
+via the existing APIs. Verified three ways: 9 new automated backend tests (up from 159
+going into this phase — 3 in `test_postmortems.py`, 6 in `test_dashboard_service.py`)
+run against the real dev Postgres. 21 new frontend tests (`graph-layout.test.ts`,
+`highlight-text.test.ts`, `ServiceMapCanvas.test.tsx`, `ServiceSidePanel.test.tsx`,
+`NewPostmortemModal.test.tsx`, `KnowledgeBase.test.tsx`, `PostmortemDetail.test.tsx`,
+`MttrChart.test.tsx`, `FragileServicesTable.test.tsx`, `RecentBriefsList.test.tsx`,
+`Dashboard.test.tsx`, `ServiceMap.test.tsx`) via `vitest`. **Also** verified with a real
+automated Playwright e2e suite (`e2e/tests/service-map-kb-dashboard.spec.ts`, 5 tests)
+against the fully isolated `docker-compose.test.yml` stack, and — separately — with a
+genuine live-browser Playwright MCP walkthrough of all three screens (including seeding
+a real team/services/edges via direct API calls and ingesting a real postmortem through
+the UI) before the e2e suite was written, which is what caught the blast-radius
+highlighting gap described below.
+
+| Step | Status | Notes |
+|---|---|---|
+| 1. BRANCH | done | `feat/service-map-kb-dashboard`, created from `main` after Phase 9 merged |
+| 2. READ | done | |
+| 3. EXPLORE | done | Confirmed `GET /catalog/graph`, `GET /catalog/services/{id}/blast-radius`, and `GET /incidents?service_id=` (Phases 4/9) already covered everything the Service Map's side panel needed with zero new endpoints; found the postmortem API exposed none of Phase 6's extraction output and nothing aggregated across incidents/postmortems/services for the dashboard |
+| 4. DOCUMENT | done | `docs/modules/phase-10-service-map-kb-dashboard/{PRD,FRD,NFR}.md` committed before any code |
+| 5. CODE-BE | done | `app/schemas/postmortem.py`/`postmortem_service.py`/`api/v1/postmortems.py` extended (affected_services, facts, redacted_text); new `app/schemas/dashboard.py`, `app/services/dashboard_service.py`, `app/api/v1/dashboard.py` |
+| 6. TEST-BE | done | `ruff`, `mypy --strict`, `pytest` (159/159) all clean, run inside the `api` container |
+| 7. REVIEW-BE | **APPROVED** | 0 blocking / 0 warnings / 1 NOTE (FRD wording left over from a mid-implementation design correction — see below). Fixed; no re-review needed for a doc-only note. |
+| 8. CODE-FE | done | `lib/graph-layout.ts`, `lib/highlight-text.ts`; `components/service-map/{ServiceMapCanvas,ServiceSidePanel}.tsx`; `pages/ServiceMap.tsx` (F9); `components/knowledge-base/NewPostmortemModal.tsx`; `pages/{KnowledgeBase,PostmortemDetail}.tsx` (F8); `components/dashboard/{MttrChart,FragileServicesTable,RecentBriefsList}.tsx`; `pages/Dashboard.tsx` (F4); `recharts` added as a new dependency |
+| 9. TEST-FE | done | `tsc --noEmit`, `eslint --max-warnings 0`, `prettier --check`, `vitest` (79/79), `vite build` all clean, run inside the `web` container |
+| 10. REVIEW-FE | **APPROVED** | First pass: 1 BLOCKING + 2 WARNING, all against the Service Map specifically — see below. Fixed all 3; re-review independently re-read the corrected code, ran the affected tests itself (18/18), confirmed a clean `tsc --noEmit`, and approved with 0/0/0 (1 non-blocking note about a missing retry button, not required by any finding). |
+| 11. TEST-E2E | done | `e2e/tests/service-map-kb-dashboard.spec.ts` (5 tests) against `docker-compose.test.yml`, 5/5 passing on the first run (21/21 across the full e2e suite, after fixing one pre-existing test that asserted the now-replaced `/dashboard` stub's placeholder text) |
+| 12. PUSH | pending | |
+| 13. PR | pending | |
+| 14. MERGE | pending | |
+
+### Bugs found only by the code-reviewer sub-agent (not by any tool)
+
+- **The Service Map had no error state at all** — a failed catalog/teams fetch
+  rendered identically to a genuinely empty, unonboarded workspace ("No services
+  yet"), with no way to tell the two apart and no retry affordance. The other two
+  screens built this same phase (Knowledge Base, Dashboard) both got this distinction
+  from the start, closely following Phase 9's incident-page pattern; the Service Map
+  — built first, before that pattern had fully crystallized — didn't. Fixed with a
+  distinct error `EmptyState`, checked before the empty-catalog check.
+- **`ServiceSidePanel`'s blast-radius and incident-history sections had the same gap
+  one level down** — both branched only on loading vs. success, silently reading a
+  failed fetch as "no downstream impact" / "no incident history." Fixed with explicit
+  error branches in both, the blast-radius one threaded down from the page via a new
+  `blastRadiusError` prop.
+- **`graph-layout.test.ts` never actually exercised the 40-node/60-edge scale the NFR
+  commits to verifying** — the existing tests (chain/diamond/cycle) all use 3-4 nodes.
+  Fixed by adding that fixture, built deterministically (not randomly) so it stays
+  reproducible.
+- A NOTE-level observation (not a finding, no fix required): the error `EmptyState`
+  has no retry button, but no other page in the codebase uses that affordance either,
+  so this isn't a regression against an established pattern.
+
+### A real gap self-caught before e2e, not by any review pass
+
+- **The Service Map's blast-radius highlighting initially passed an empty set to the
+  canvas.** `ServiceMap.tsx`'s first draft rendered the side panel but didn't lift the
+  blast-radius query up to the page level, so `ServiceMapCanvas` never actually
+  learned which nodes to highlight in red on node click — FR-02's most visually
+  obvious requirement silently did nothing. Caught during my own live-browser
+  Playwright MCP walkthrough (clicking a node and noticing the map didn't change),
+  before writing any component tests for it. Fixed by lifting the `getBlastRadius`
+  query to `ServiceMap.tsx` and passing its resolved service ids down to both the
+  canvas (for highlighting) and the side panel (so it isn't fetched twice).
+
+### Bugs found only by trying to add a new frontend dependency
+
+- **`docker-compose.yml`'s `web` service only bind-mounts `frontend/src` and
+  `frontend/public`** — `package.json`/`package-lock.json`/`node_modules` all live
+  solely inside the container's own image filesystem. `npm install recharts` run
+  inside the running container correctly updated its own copy, but that never
+  reached the host's git working tree at all. Fixed for this session with `docker cp`
+  to copy the updated files back out; not a process change, just a one-off manual
+  step worth knowing about the next time a phase adds a dependency. See ADR 0010 §5.
+
+### Doc fix caught by REVIEW-BE (not a code bug)
+
+- The FRD's "Internal Architecture" section still described `get_dashboard`'s
+  aggregate queries as running "concurrently where they touch disjoint tables" after
+  the NFR (and the actual shipped code) had already been corrected to sequential
+  execution during implementation — every dashboard aggregate shares one
+  request-scoped `AsyncSession`, which cannot run concurrent operations regardless of
+  which tables the queries touch, the same constraint ADR 0007 §1 and ADR 0008 §4
+  already established. Doc-only fix; the code was already correct. See ADR 0010 §4.
+
+### Design decisions worth noting
+
+- The Service Map's layout is a deterministic, hand-rolled layered algorithm, not a
+  force-directed physics simulation — non-deterministic layouts are effectively
+  untestable, and the actual acceptance bar ("40 nodes without stutter") is a layout
+  problem, not a "looks organic" problem. See ADR 0010 §1 and FRD Gap #5.
+- `fragility_score = incident_count × (1 + blast_radius_size)`, defined precisely
+  since Master-Prompt.md only named the two inputs, not how to combine them. See
+  ADR 0010 §2 and FRD Gap #4.
+- `get_postmortem_detail` joins facts straight to their source chunk with no
+  dangling-reference branch — `PostmortemFact.source_chunk_id` is a real FK with
+  `ON DELETE CASCADE`, unlike Phase 9's JSONB-stored citations, so the defensive
+  branch a first draft copied from that precedent was handling an impossible case.
+  Caught by trying to write the test for it. See ADR 0010 §3.
+
+Full detail on all findings and design rationale: ADR 0010.
+
 ## Phase 11 — Seed Corpus & Demo Mode — pending
 ## Phase 12 — Evaluation Harness — pending
 ## Phase 13 — Observability, Settings, API Keys — pending
