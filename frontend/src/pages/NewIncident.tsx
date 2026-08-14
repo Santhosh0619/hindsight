@@ -63,10 +63,15 @@ export function NewIncident(): React.JSX.Element {
       (event) => {
         setEvents((prev) => [...prev, event]);
         if (event.type === "done") {
-          void listBriefs(workspaceId, incident.id).then((briefs) => {
-            setBrief(briefs[0] ?? null);
-            setPhase("done");
-          });
+          listBriefs(workspaceId, incident.id)
+            .then((briefs) => {
+              setBrief(briefs[0] ?? null);
+              setPhase("done");
+            })
+            .catch((error: unknown) => {
+              setErrorMessage(error instanceof Error ? error.message : String(error));
+              setPhase("error");
+            });
         } else if (event.type === "error") {
           setErrorMessage(event.message);
           setPhase("error");
