@@ -547,7 +547,7 @@ cleanly with `"All LLM providers unavailable"` and dead-lettered after retrying.
 
 Full detail on all findings and design rationale: ADR 0006.
 
-## Phase 7 — Hybrid Retrieval — done, PR pending
+## Phase 7 — Hybrid Retrieval — done, PR open ([PR #8](https://github.com/Santhosh0619/hindsight/pull/8))
 
 Target checkpoint (Master-Prompt.md): query the same corpus in `vector`/`keyword`/
 `graph`/`hybrid` mode and get visibly different, correctly-attributed result sets;
@@ -578,8 +578,8 @@ cross-workspace isolation, and the unauthenticated redirect.
 | 10. REVIEW-FE | **APPROVED** | 0 blocking / 0 warnings / 0 notes on the first pass |
 | 11. TEST-E2E | done | `e2e/tests/search.spec.ts` (4 tests) against the extended `docker-compose.test.yml` stack, 4/4 passing (12/12 across the full e2e suite). Graph mode's fixture needs a real LLM (not configured in this stack) to link a postmortem to a service, so graph-mode-specific e2e coverage stays deferred to backend pytest's DB-level fixtures until a key is added — see ADR 0007 §5. |
 | 12. PUSH | done | `feat/hybrid-retrieval` pushed; pre-push hook (ruff, mypy, pytest, tsc, eslint, prettier, vitest, build, all in Docker) passed |
-| 13. PR | pending | |
-| 14. MERGE | pending | |
+| 13. PR | done | [#8](https://github.com/Santhosh0619/hindsight/pull/8) opened against `main` |
+| 14. MERGE | pending | awaiting explicit go-ahead |
 
 ### Bugs found only by measuring real embeddings (not by reasoning about them)
 
