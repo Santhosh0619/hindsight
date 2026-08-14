@@ -1,6 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-
-export type Severity = "sev1" | "sev2" | "sev3" | "sev4";
+import type { Severity } from "@/lib/types";
 
 const SEVERITY_VARIANT: Record<Severity, "destructive" | "warning" | "muted"> = {
   sev1: "destructive",
