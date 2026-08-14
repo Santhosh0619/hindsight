@@ -571,3 +571,78 @@ loaded. Raising the timeout on every assertion would have hidden a real regressi
 that same window if one ever appeared. Instead, added a `test.beforeAll` hook that fires
 one throwaway search request before any timed assertion runs, so the cold start happens
 during setup and every real assertion is timing the feature, not the interpreter.
+
+---
+
+## Phase 8 — LangGraph Agent Pipeline
+
+**Q: `correlator_node` has to run with no LLM call at all, but one of its subscores is
+`failure_mode_overlap` — how do you score overlap against a failure mode the incident
+was never classified into?**
+
+A: Reframed it as a recurrence signal among the *retrieved candidates*, not a
+comparison against the incident itself. For every failure-mode label present across the
+whole candidate set, compute how often it appears (fraction of candidates carrying it);
+a candidate's own overlap score is the mean frequency of its own labels. A candidate
+whose failure modes are common among the *other* results scores higher — "the rest of
+what retrieval found agrees this is the pattern." That's deterministic, needs nothing
+from the incident's own (nonexistent) failure-mode classification, and is exactly what
+plan.md's "recurrence detection" bullet describes without inventing a whole rule-based
+classifier just for this one subscore.
+
+**Q: The critic's deterministic citation check validates chunk ids against "the
+retrieval set" — what exactly counts as that set, and why does it matter?**
+
+A: Specifically the chunk ids that were actually shown to the analyst in its prompt —
+one excerpt per retrieved result — not every chunk that postmortem happens to own in
+the database. A citation naming a real chunk from the right postmortem that just wasn't
+the one excerpted would pass a naive "does this chunk_id exist" check while still being
+something the model couldn't have legitimately cited, since it never saw that content.
+Narrowing the valid set to exactly what was shown is what makes the guarantee actually
+mean something: every surviving citation traces to text the model had in front of it,
+not just text that happens to exist somewhere in the corpus.
+
+**Q: Walk me through a bug your own test suite caught that a design/doc review didn't.**
+
+A: `stream_graph_events`'s first version used the same database session for writing
+`AgentRunStep` rows as the session bound into the graph's own nodes. Running a real
+graph through the real streaming wrapper — not just reading the code — immediately
+threw `This session is provisioning a new connection; concurrent operations are not
+permitted`, because `astream_events` runs the compiled graph as its own concurrent task
+while the generator consuming its events executes independently; the observer loop's
+commit for one node's step row raced against the next node's own queries on that same
+session. It's the identical underlying class of bug as an earlier phase's retrieval
+code needing separate sessions for concurrent retrievers — same root cause, different
+place it showed up. Two code-review passes reading the design didn't catch it, because
+a concurrency argument written in a doc is a claim, not a proof, until something has
+actually run concurrently and not broken. Fixed by giving every step write its own
+fresh session, independent of whatever the graph's nodes are using.
+
+**Q: What happens to a brief if the LLM quota runs out midway through a run — say,
+after the normalizer and analyst both already succeeded, but the critic's judgment call
+fails?**
+
+A: Every LLM-calling node catches that failure locally and degrades in place, rather
+than one try/except wrapped around the entire graph. The critic specifically falls back
+to a pass-through verification (a score that always routes to the briefer, never back
+to the retriever, since retrying against a still-unavailable LLM gains nothing) while
+keeping whatever the deterministic citation check already validated. The brief that
+comes out the other end is honest about what happened — `llm_used=False` on the
+persisted row — but it isn't empty: the analyst's draft (if it got that far),
+correlator's ranked candidates, and blast radius are all real deterministic output, not
+discarded because one downstream call failed.
+
+**Q: Why isn't the Postgres checkpointer wired into the app's startup this phase, even
+though it's fully built and the plan says the graph should be "compiled once at
+startup"?**
+
+A: Because there's no real caller yet — the incidents API that will actually invoke
+this graph doesn't exist until Phase 9. `AsyncPostgresSaver` is an async context
+manager; holding one open for the whole app's lifetime would add a second Postgres
+connection pool and a setup round-trip to every single test that boots the app, for a
+feature nothing calls. Same restraint already applied twice before in this build: the
+LLM router constructs providers lazily instead of at startup, and the semantic cache sat
+built-but-unwired for two whole phases until Phase 8 actually had a use for it. The
+checkpointer itself is fully live-verified this phase — a real saver, a real graph run,
+a real read-back of the persisted checkpoint — just not left running inside the app
+with nothing pointed at it.

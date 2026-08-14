@@ -32,7 +32,7 @@ class GraphHit(BaseModel):
     rank: int
 
 
-def _recency_weight(occurred_at: datetime | None) -> float:
+def recency_weight(occurred_at: datetime | None) -> float:
     # A very old postmortem is still relevant context -- weighted down, never zeroed.
     if occurred_at is None:
         return _MIN_RECENCY_WEIGHT
@@ -87,7 +87,7 @@ async def search_graph(
     best_by_postmortem: dict[uuid.UUID, GraphHit] = {}
     for link, postmortem in links_result:
         matched, via = candidates[link.service_id]
-        score = _ROLE_WEIGHT.get(link.role, 0.0) * _recency_weight(postmortem.occurred_at)
+        score = _ROLE_WEIGHT.get(link.role, 0.0) * recency_weight(postmortem.occurred_at)
         existing = best_by_postmortem.get(link.postmortem_id)
         if existing is not None and existing.score >= score:
             continue
