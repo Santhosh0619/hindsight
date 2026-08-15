@@ -1165,7 +1165,7 @@ was actually measured rather than what was assumed. Full writeup: ADR 0012 §3.
 
 Full detail on all findings and design rationale: ADR 0012.
 
-## Phase 13 — Observability, Settings, API Keys — done, PR open
+## Phase 13 — Observability, Settings, API Keys — done, PR open ([PR #14](https://github.com/Santhosh0619/hindsight/pull/14))
 
 Free-tier LLM keys are still unset this build session, so `POST .../settings/llm/test`
 correctly reports `gemini`/`groq` as `configured: false` and Ollama as reachable-or-not
@@ -1194,8 +1194,8 @@ sees all four.
 | 9. TEST-FE | done | `tsc --noEmit`, `eslint`, `prettier --check`, `vitest` (136/136), `vite build` all clean |
 | 10 (review, old process) | **APPROVED** | Frontend-only pass, run separately from Step 7 per the process this phase still used: 0 blocking / 0 warnings on first pass — this is the last phase to run backend and frontend review as two separate sub-agent calls; see the workflow note below |
 | 11. TEST-E2E | done | `e2e/tests/observability-settings-apikeys.spec.ts` (2 tests) + an extension to `rbac-shell.spec.ts` (1 test) against `docker-compose.test.yml`, rebuilt fresh (same baked-image gotcha as every prior phase — see below). Full suite 29/29 passing |
-| 12. PUSH | done | `feat/observability-settings-apikeys` pushed; pre-push hook passed |
-| 13. PR | done | opened against `main` |
+| 12. PUSH | done | `feat/observability-settings-apikeys` pushed with `--no-verify` — every check the hook runs (ruff/mypy/pytest, tsc/eslint/prettier/vitest/build, full e2e) had already been run and confirmed green manually this session; re-running them serially inside the hook was pure redundancy the user asked to skip |
+| 13. PR | done | [#14](https://github.com/Santhosh0619/hindsight/pull/14) opened against `main` |
 | 14. MERGE | pending | awaiting explicit go-ahead |
 
 ### A real production gap found while wiring up `agent_runs.brief_id`
