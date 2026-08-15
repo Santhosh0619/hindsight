@@ -38,6 +38,7 @@ class EvalRun(Base, UUIDPrimaryKeyMixin):
         index=True,
     )
     git_sha: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    mode: Mapped[str | None] = mapped_column(String(20), nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     recall_at_1: Mapped[float | None] = mapped_column(Float, nullable=True)
