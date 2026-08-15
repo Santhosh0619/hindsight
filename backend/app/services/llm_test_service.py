@@ -1,11 +1,14 @@
 import time
 
 from app.core.config import Settings
+from app.core.logging import get_logger
 from app.schemas.settings import LLMProviderTestOut, ProviderName
 from app.services.llm.gemini import GeminiProvider
 from app.services.llm.groq import GroqLLMProvider
 from app.services.llm.ollama import OllamaLLMProvider
 from app.services.llm.provider import LLMProvider
+
+logger = get_logger(__name__)
 
 _TEST_PROMPT = "Reply with the single word: ok"
 _TEST_SYSTEM = "You are a connectivity check. Follow the instruction exactly."
@@ -52,6 +55,9 @@ async def test_all_providers(settings: Settings) -> list[LLMProviderTestOut]:
 
     for name, provider in slots:
         if provider is None:
+            logger.info(
+                "llm_provider_tested", provider=name, configured=False, ok=None, latency_ms=None
+            )
             results.append(
                 LLMProviderTestOut(
                     provider=name, configured=False, ok=None, latency_ms=None, error=None
@@ -59,6 +65,9 @@ async def test_all_providers(settings: Settings) -> list[LLMProviderTestOut]:
             )
             continue
         ok, latency_ms, error = await _test_provider(provider)
+        logger.info(
+            "llm_provider_tested", provider=name, configured=True, ok=ok, latency_ms=latency_ms
+        )
         results.append(
             LLMProviderTestOut(
                 provider=name, configured=True, ok=ok, latency_ms=latency_ms, error=error

@@ -58,7 +58,10 @@ async def create_key(
     await db.refresh(key)
 
     logger.info(
-        "api_key_created", key_id=str(key.id), prefix=prefix, workspace_id=str(workspace_id)
+        "api_key_created",
+        key_id=str(key.id),
+        prefix=prefix,
+        actor_user_id=str(actor_user_id),
     )
     return key, raw_key
 
@@ -90,7 +93,7 @@ async def revoke_key(
         meta={"name": key.name, "prefix": key.prefix},
     )
     await db.commit()
-    logger.info("api_key_revoked", key_id=str(key.id), workspace_id=str(workspace_id))
+    logger.info("api_key_revoked", key_id=str(key.id), actor_user_id=str(actor_user_id))
 
 
 async def authenticate_key(db: AsyncSession, *, raw_key: str) -> ApiKey:
