@@ -31,8 +31,10 @@ test.describe("Demo mode (Phase 11)", () => {
     await expect(page.getByText("Open incidents")).toBeVisible();
     await expect(page.getByText("Corpus size")).toBeVisible();
     // A brand-new empty workspace never has a nonzero corpus size -- this is only
-    // true against the real seeded 80 postmortems.
-    await expect(page.getByText("80")).toBeVisible();
+    // true against the real seeded 80 postmortems. Exact match -- the demo guest's
+    // own randomly-generated email (e.g. "guest-af9394f380d3@...") can otherwise
+    // contain "80" as a substring and collide with a loose getByText("80").
+    await expect(page.getByText("80", { exact: true })).toBeVisible();
 
     await page.goto("/knowledge-base");
     await expect(page.getByText("No postmortems yet")).not.toBeVisible();
