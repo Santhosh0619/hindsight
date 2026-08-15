@@ -1,6 +1,6 @@
 [
   {
-    "title": "payment-gateway-adapter: cert expiry",
+    "title": "payment-gateway-adapter: cert expiry (2)",
     "raw_text": "Summary:\nAn expired TLS cert on payment-gateway-adapter broke every inbound connection the instant the clock passed midnight.\n\nTimeline:\nBecause the failure was so sudden and total, the team's first guess was a bad deploy that had gone out around the same time, which turned out to be unrelated.\n\nRoot Cause:\nThe certificate had a 90-day validity window and no automated renewal was ever wired up after the service was migrated to a new load balancer.\n\nImpact:\nA full outage of payment-gateway-adapter for all callers until the cert was manually replaced.\n\nRemediation:\nAutomated certificate renewal is now standard for every service behind this load balancer, not just newly provisioned ones.\n\nAction Items:\nAdd expiry monitoring across the whole certificate inventory, not just the ones known to be manually managed.",
     "occurred_at": "2024-04-05T00:00:00Z",
     "duration_minutes": 106,
@@ -107,7 +107,7 @@
     "scenario_key": "connection_pool_exhaustion"
   },
   {
-    "title": "identity-db: connection pool exhaustion",
+    "title": "identity-db: connection pool exhaustion (2)",
     "raw_text": "Summary:\nidentity-db exhausted its outbound connection pool during a traffic spike, causing a five-minute window of elevated latency and request timeouts.\n\nTimeline:\nAt first the on-call engineer suspected a bad deploy from earlier that day and rolled it back, which did not help.\n\nRoot Cause:\nThe connection pool size was left at its default of 10, far below what the service's actual concurrent request volume required once traffic exceeded the previous quarter's peak.\n\nImpact:\nRoughly 8% of requests during the window returned a 503 or timed out client-side.\n\nRemediation:\nThe pool size was raised to 50 and a queueing timeout was added so exhaustion degrades gracefully instead of hanging connections indefinitely.\n\nAction Items:\nAdd pool-utilization alerting. Load-test the new pool size before the next seasonal traffic peak.\n\nDetection:\nNo alert fired on pool utilization itself -- only downstream request-latency alerts caught this, several minutes after the pool was already saturated.",
     "occurred_at": "2025-07-08T00:00:00Z",
     "duration_minutes": 103,
@@ -180,7 +180,7 @@
     "scenario_key": "config_rollout"
   },
   {
-    "title": "payments-db: connection pool exhaustion",
+    "title": "payments-db: connection pool exhaustion (2)",
     "raw_text": "Summary:\npayments-db ran out of available client slots under load, and every service depending on it queued behind the same limited pool.\n\nTimeline:\nAn initial hypothesis blamed a network partition between availability zones; packet captures ruled that out within twenty minutes.\n\nRoot Cause:\nA recent capacity-planning review had not accounted for a new caller that opened long-lived connections instead of releasing them between requests, silently consuming a growing share of the fixed pool.\n\nImpact:\nDownstream callers saw their own request queues back up, and the incident briefly looked like a multi-service outage before the shared root cause was found.\n\nRemediation:\nThe offending caller was patched to release connections properly, and a hard cap on per-caller pool share was added as a backstop.\n\nAction Items:\nAudit every other high-traffic caller for the same connection-lifecycle bug. Document the pool-sizing formula.",
     "occurred_at": "2024-05-14T00:00:00Z",
     "duration_minutes": 37,
@@ -593,7 +593,7 @@
     "scenario_key": "retry_storm"
   },
   {
-    "title": "checkout-cache: cache stampede",
+    "title": "checkout-cache: cache stampede (2)",
     "raw_text": "Summary:\nA single popular cache entry behind checkout-cache expired and every waiting request stampeded the origin simultaneously.\n\nTimeline:\nInitial paging suggested a database outage, since query latency to the origin store spiked in step with the cache miss.\n\nRoot Cause:\nNo mechanism existed to serialize origin fetches for a single key on a cache miss, so a thundering herd of identical queries hit the origin at once instead of one query populating the cache for everyone else.\n\nImpact:\nOrigin query latency spiked enough to trip an unrelated downstream timeout, briefly widening the incident's blast radius.\n\nRemediation:\nA request-coalescing layer was added in front of the origin so concurrent misses for the same key share one fetch.\n\nAction Items:\nExtend request coalescing to the other two high-traffic cache namespaces that share this same risk.",
     "occurred_at": "2025-03-02T00:00:00Z",
     "duration_minutes": 142,
@@ -627,7 +627,7 @@
     "scenario_key": "cache_stampede"
   },
   {
-    "title": "payment-gateway-adapter: quota exhaustion",
+    "title": "payment-gateway-adapter: quota exhaustion (2)",
     "raw_text": "Summary:\nGrowing call volume to payment-gateway-adapter finally crossed an external quota limit nobody had been watching, and every call past that point failed outright.\n\nTimeline:\nRetries against the quota-exceeded error just kept failing identically, which at least ruled out a transient network issue quickly.\n\nRoot Cause:\nThe provider's quota was set based on usage projections from over a year earlier and had never been revisited as the integration's traffic grew.\n\nImpact:\nAll calls to payment-gateway-adapter failed for the remainder of the billing window.\n\nRemediation:\nNegotiated a higher quota with the provider and added proactive usage alerting well before the new limit.\n\nAction Items:\nEstablish a recurring quarterly review of usage against quota for every metered external dependency.",
     "occurred_at": "2023-09-02T00:00:00Z",
     "duration_minutes": 101,
@@ -831,7 +831,7 @@
     "scenario_key": "connection_pool_exhaustion"
   },
   {
-    "title": "payments-db: disk saturation",
+    "title": "payments-db: disk saturation (2)",
     "raw_text": "Summary:\nDisk usage on payments-db crept up for weeks until it finally hit 100% and every write started erroring.\n\nTimeline:\nCapacity dashboards had shown a slow upward trend for weeks, but the trend line wasn't alerting on and nobody was watching it closely enough to catch it before it topped out.\n\nRoot Cause:\nAn old debug-logging flag had been left enabled in production, generating far more log volume than the retention policy was designed to handle.\n\nImpact:\npayments-db rejected writes for roughly forty minutes.\n\nRemediation:\nDisabled the debug-logging flag, freed space immediately, and added a trend-based alert that fires well before disk usage reaches capacity rather than only at a fixed threshold.\n\nAction Items:\nAudit production configuration for any other debug flags left on from an earlier investigation.",
     "occurred_at": "2025-01-13T00:00:00Z",
     "duration_minutes": 169,
@@ -967,7 +967,7 @@
     "scenario_key": "cert_expiry"
   },
   {
-    "title": "identity-db: disk saturation",
+    "title": "identity-db: disk saturation (2)",
     "raw_text": "Summary:\nidentity-db's disk filled up from unbounded log retention, and writes started failing once there was no space left.\n\nTimeline:\nThe first alert was a generic disk-space warning that was acknowledged but not acted on for several hours before writes actually started failing.\n\nRoot Cause:\nA log-rotation policy that was supposed to cap retention at 14 days had silently stopped running after a configuration change months earlier, and nobody noticed until the disk was completely full.\n\nImpact:\nWrite operations against identity-db failed for close to forty minutes while space was cleared.\n\nRemediation:\nRestored the log-rotation job, added a hard alert threshold at 85% disk usage instead of only at 95%, and moved older logs to cheaper cold storage automatically.\n\nAction Items:\nReview every other host's log-retention configuration for the same silent-failure risk.",
     "occurred_at": "2025-07-29T00:00:00Z",
     "duration_minutes": 22,
@@ -1069,7 +1069,7 @@
     "scenario_key": "clock_skew"
   },
   {
-    "title": "redis-cache: cache stampede",
+    "title": "redis-cache: cache stampede (2)",
     "raw_text": "Summary:\nredis-cache evicted a hot key at the same moment thousands of requests needed it, and every one of them fell through to the origin at once.\n\nTimeline:\nThe team initially suspected the cache cluster itself had crashed, since request latency to it spiked at the same time.\n\nRoot Cause:\nThe hot key's TTL expired with no jitter, so every instance's local view of the cache went stale in the same millisecond, and none of them coordinated on who should repopulate it.\n\nImpact:\nThe origin datastore behind redis-cache saw a 40x spike in read load for about ninety seconds.\n\nRemediation:\nAdded TTL jitter so keys don't all expire together, and a single-flight lock so only one request repopulates a given key while the rest wait on that result instead of all hitting the origin.\n\nAction Items:\nIdentify other high-traffic cache keys with the same synchronized-TTL risk and apply the same jitter fix proactively.",
     "occurred_at": "2024-07-22T00:00:00Z",
     "duration_minutes": 163,
@@ -1205,7 +1205,7 @@
     "scenario_key": "thread_pool_starvation"
   },
   {
-    "title": "message-bus: poison message",
+    "title": "message-bus: poison message (2)",
     "raw_text": "Summary:\nA single malformed message on message-bus was repeatedly redelivered and crashed every consumer that tried to process it.\n\nTimeline:\nThe on-call engineer initially restarted the consumer fleet, which briefly appeared to help before the same crash recurred within a minute.\n\nRoot Cause:\nA message with an unexpected null field bypassed input validation at the producer, and the consumer's deserializer threw an unhandled exception on every delivery attempt instead of moving the message aside.\n\nImpact:\nThe consumer fleet crash-looped for close to an hour, backing up the rest of the queue behind the one bad message.\n\nRemediation:\nAdded a dead-letter queue so a message that fails processing a fixed number of times is moved aside instead of blocking the whole queue, plus stricter producer-side validation.\n\nAction Items:\nAdd a schema-validation gate at the producer for every topic that doesn't already have one.",
     "occurred_at": "2025-07-05T00:00:00Z",
     "duration_minutes": 145,
@@ -1409,7 +1409,7 @@
     "scenario_key": "retry_storm"
   },
   {
-    "title": "notification-queue: poison message",
+    "title": "notification-queue: poison message (3)",
     "raw_text": "Summary:\nOne bad event on notification-queue kept getting redelivered and taking down whichever consumer instance picked it up next.\n\nTimeline:\nMetrics showed consumer lag growing steadily, which initially looked like a simple capacity problem rather than a single message repeatedly crashing every worker.\n\nRoot Cause:\nThe consumer had no per-message retry limit, so a message that always fails to deserialize was retried forever, each attempt crashing the worker that picked it up.\n\nImpact:\nQueue lag grew for the better part of an hour before the actual cause -- one message, not a capacity shortfall -- was identified.\n\nRemediation:\nA maximum redelivery count now routes a repeatedly-failing message to a dead-letter queue for manual inspection instead of endless retry.\n\nAction Items:\nBuild a small dashboard for dead-letter queue depth so a growing pile of poison messages is visible before it causes an incident.",
     "occurred_at": "2025-04-29T00:00:00Z",
     "duration_minutes": 125,
@@ -1482,7 +1482,7 @@
     "scenario_key": "connection_pool_exhaustion"
   },
   {
-    "title": "sso-gateway: cert expiry",
+    "title": "sso-gateway: cert expiry (2)",
     "raw_text": "Summary:\nThe TLS certificate for sso-gateway expired at midnight, and every caller started failing the handshake within seconds.\n\nTimeline:\nThe first reports were mistaken for a DNS problem, since callers just saw connection failures with no useful error detail at first glance.\n\nRoot Cause:\nCertificate renewal was a manual process the team had meant to automate the previous quarter but never got to, and nobody was tracking the expiry date on a calendar either.\n\nImpact:\nEvery caller of sso-gateway failed outright for eighteen minutes until a new certificate was issued and deployed.\n\nRemediation:\nCertificate renewal was automated end-to-end, and a 45-day-before-expiry alert was added as a backstop even for automated certificates.\n\nAction Items:\nAudit every other service for a manually-managed certificate with no expiry alerting.",
     "occurred_at": "2024-02-02T00:00:00Z",
     "duration_minutes": 167,
@@ -1584,7 +1584,7 @@
     "scenario_key": "disk_saturation"
   },
   {
-    "title": "message-bus: poison message",
+    "title": "message-bus: poison message (3)",
     "raw_text": "Summary:\nA single malformed message on message-bus was repeatedly redelivered and crashed every consumer that tried to process it.\n\nTimeline:\nThe on-call engineer initially restarted the consumer fleet, which briefly appeared to help before the same crash recurred within a minute.\n\nRoot Cause:\nA message with an unexpected null field bypassed input validation at the producer, and the consumer's deserializer threw an unhandled exception on every delivery attempt instead of moving the message aside.\n\nImpact:\nThe consumer fleet crash-looped for close to an hour, backing up the rest of the queue behind the one bad message.\n\nRemediation:\nAdded a dead-letter queue so a message that fails processing a fixed number of times is moved aside instead of blocking the whole queue, plus stricter producer-side validation.\n\nAction Items:\nAdd a schema-validation gate at the producer for every topic that doesn't already have one.",
     "occurred_at": "2025-04-17T00:00:00Z",
     "duration_minutes": 156,
@@ -1652,7 +1652,7 @@
     "scenario_key": "dependency_version_drift"
   },
   {
-    "title": "search-cache: cache stampede",
+    "title": "search-cache: cache stampede (2)",
     "raw_text": "Summary:\nA single popular cache entry behind search-cache expired and every waiting request stampeded the origin simultaneously.\n\nTimeline:\nInitial paging suggested a database outage, since query latency to the origin store spiked in step with the cache miss.\n\nRoot Cause:\nNo mechanism existed to serialize origin fetches for a single key on a cache miss, so a thundering herd of identical queries hit the origin at once instead of one query populating the cache for everyone else.\n\nImpact:\nOrigin query latency spiked enough to trip an unrelated downstream timeout, briefly widening the incident's blast radius.\n\nRemediation:\nA request-coalescing layer was added in front of the origin so concurrent misses for the same key share one fetch.\n\nAction Items:\nExtend request coalescing to the other two high-traffic cache namespaces that share this same risk.",
     "occurred_at": "2023-01-08T00:00:00Z",
     "duration_minutes": 149,
@@ -1686,7 +1686,7 @@
     "scenario_key": "cache_stampede"
   },
   {
-    "title": "auth-service: config rollout",
+    "title": "auth-service: config rollout (2)",
     "raw_text": "Summary:\nA configuration rollout to auth-service shipped a typo'd feature-flag value that disabled a required code path for every request.\n\nTimeline:\nBecause the deploy itself looked healthy in the pipeline, the team spent the first ten minutes ruling out a code regression before checking the configuration change.\n\nRoot Cause:\nThe config change was pushed directly through the admin panel rather than through the reviewed pipeline, so the typo skipped both code review and the pipeline's own validation step.\n\nImpact:\nEvery request to auth-service hit the disabled code path and returned an error for the duration of the incident.\n\nRemediation:\nConfig changes now go through the same reviewed pipeline as code, with a validation step that rejects unknown flag values instead of silently accepting them.\n\nAction Items:\nClose the admin-panel direct-edit path entirely, or at minimum require the same review as a code change.",
     "occurred_at": "2024-02-05T00:00:00Z",
     "duration_minutes": 27,
@@ -1822,7 +1822,7 @@
     "scenario_key": "cert_expiry"
   },
   {
-    "title": "checkout-cache: cache stampede",
+    "title": "checkout-cache: cache stampede (3)",
     "raw_text": "Summary:\ncheckout-cache evicted a hot key at the same moment thousands of requests needed it, and every one of them fell through to the origin at once.\n\nTimeline:\nThe team initially suspected the cache cluster itself had crashed, since request latency to it spiked at the same time.\n\nRoot Cause:\nThe hot key's TTL expired with no jitter, so every instance's local view of the cache went stale in the same millisecond, and none of them coordinated on who should repopulate it.\n\nImpact:\nThe origin datastore behind checkout-cache saw a 40x spike in read load for about ninety seconds.\n\nRemediation:\nAdded TTL jitter so keys don't all expire together, and a single-flight lock so only one request repopulates a given key while the rest wait on that result instead of all hitting the origin.\n\nAction Items:\nIdentify other high-traffic cache keys with the same synchronized-TTL risk and apply the same jitter fix proactively.",
     "occurred_at": "2023-05-26T00:00:00Z",
     "duration_minutes": 142,
@@ -1924,7 +1924,7 @@
     "scenario_key": "cache_stampede"
   },
   {
-    "title": "payment-gateway-adapter: retry storm",
+    "title": "payment-gateway-adapter: retry storm (2)",
     "raw_text": "Summary:\nA short-lived hiccup calling out to payment-gateway-adapter turned into a self-inflicted overload once the retries synchronized.\n\nTimeline:\nDashboards initially suggested the incident was still ongoing on the provider side, delaying the correct diagnosis.\n\nRoot Cause:\nA fixed one-second retry interval, shared by every instance of the calling service, meant thousands of retries fired in the same one-second window over and over.\n\nImpact:\nRequest volume against payment-gateway-adapter was three times normal for nearly half an hour after the original blip resolved.\n\nRemediation:\nRetries now use randomized jitter so instances no longer retry in lockstep, and a circuit breaker caps concurrent outbound retries.\n\nAction Items:\nAdd an automated check that flags any new outbound client missing jitter in its retry configuration.",
     "occurred_at": "2024-08-08T00:00:00Z",
     "duration_minutes": 46,
@@ -1992,7 +1992,7 @@
     "scenario_key": "dns_failover"
   },
   {
-    "title": "checkout-api: config rollout",
+    "title": "checkout-api: config rollout (2)",
     "raw_text": "Summary:\nAn unreviewed config push to checkout-api flipped a flag to an invalid value and broke a required request path instantly.\n\nTimeline:\nThe rollout itself wasn't flagged as risky by anyone since it was 'just a config change,' which is exactly why it skipped the scrutiny a code change would have gotten.\n\nRoot Cause:\nNo schema validation existed for this particular flag's allowed values, so a typo produced a value the code silently treated as 'disabled' instead of raising an error.\n\nImpact:\nA full outage of the affected request path in checkout-api until the config was rolled back.\n\nRemediation:\nAdded schema validation for every feature-flag value and required config changes to go through the same review gate as code.\n\nAction Items:\nRetroactively add schema validation to every existing flag, not just newly created ones.",
     "occurred_at": "2023-04-21T00:00:00Z",
     "duration_minutes": 70,
@@ -2264,7 +2264,7 @@
     "scenario_key": "dns_failover"
   },
   {
-    "title": "message-bus: poison message",
+    "title": "message-bus: poison message (4)",
     "raw_text": "Summary:\nA single malformed message on message-bus was repeatedly redelivered and crashed every consumer that tried to process it.\n\nTimeline:\nThe on-call engineer initially restarted the consumer fleet, which briefly appeared to help before the same crash recurred within a minute.\n\nRoot Cause:\nA message with an unexpected null field bypassed input validation at the producer, and the consumer's deserializer threw an unhandled exception on every delivery attempt instead of moving the message aside.\n\nImpact:\nThe consumer fleet crash-looped for close to an hour, backing up the rest of the queue behind the one bad message.\n\nRemediation:\nAdded a dead-letter queue so a message that fails processing a fixed number of times is moved aside instead of blocking the whole queue, plus stricter producer-side validation.\n\nAction Items:\nAdd a schema-validation gate at the producer for every topic that doesn't already have one.",
     "occurred_at": "2023-06-08T00:00:00Z",
     "duration_minutes": 29,
@@ -2400,7 +2400,7 @@
     "scenario_key": "quota_exhaustion"
   },
   {
-    "title": "notification-queue: poison message",
+    "title": "notification-queue: poison message (2)",
     "raw_text": "Summary:\nOne bad event on notification-queue kept getting redelivered and taking down whichever consumer instance picked it up next.\n\nTimeline:\nMetrics showed consumer lag growing steadily, which initially looked like a simple capacity problem rather than a single message repeatedly crashing every worker.\n\nRoot Cause:\nThe consumer had no per-message retry limit, so a message that always fails to deserialize was retried forever, each attempt crashing the worker that picked it up.\n\nImpact:\nQueue lag grew for the better part of an hour before the actual cause -- one message, not a capacity shortfall -- was identified.\n\nRemediation:\nA maximum redelivery count now routes a repeatedly-failing message to a dead-letter queue for manual inspection instead of endless retry.\n\nAction Items:\nBuild a small dashboard for dead-letter queue depth so a growing pile of poison messages is visible before it causes an incident.",
     "occurred_at": "2025-07-17T00:00:00Z",
     "duration_minutes": 129,
@@ -2434,7 +2434,7 @@
     "scenario_key": "poison_message"
   },
   {
-    "title": "sso-gateway: retry storm",
+    "title": "sso-gateway: retry storm (2)",
     "raw_text": "Summary:\nA brief upstream blip on sso-gateway triggered a retry storm that outlasted the original outage by twenty minutes.\n\nTimeline:\nOn-call first assumed the upstream provider was still down, but the provider's own status page had already recovered five minutes earlier.\n\nRoot Cause:\nEvery caller retried failed requests immediately with no backoff or jitter, so the moment the upstream recovered it was immediately re-saturated by a synchronized wave of retries.\n\nImpact:\nSustained 3x normal request volume against sso-gateway for twenty minutes after the real outage had already ended.\n\nRemediation:\nExponential backoff with jitter was added to every retry path calling sso-gateway, and a circuit breaker now trips after a threshold of consecutive failures.\n\nAction Items:\nStandardize the retry/backoff library across all outbound HTTP clients instead of each team implementing its own.",
     "occurred_at": "2024-04-13T00:00:00Z",
     "duration_minutes": 67,
