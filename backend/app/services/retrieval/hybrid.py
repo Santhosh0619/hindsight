@@ -37,16 +37,19 @@ class _HasPostmortemId(Protocol):
 _H = TypeVar("_H", bound=_HasPostmortemId)
 
 
-def _best_hit_per_postmortem(hits: list[_H]) -> dict[uuid.UUID, _H]:
+def best_hit_per_postmortem(hits: list[_H]) -> dict[uuid.UUID, _H]:
     # Every hit list here is already sorted best-first (rank ascending) by its own
-    # producer, so the first occurrence of a postmortem id is its best hit.
+    # producer, so the first occurrence of a postmortem id is its best hit. Exported
+    # (not module-private) so the evaluation harness's own retrieval-mode composition
+    # (app/services/evaluation/runner.py) can dedup a retriever's hits the same way,
+    # without reimplementing this.
     best: dict[uuid.UUID, _H] = {}
     for hit in hits:
         best.setdefault(hit.postmortem_id, hit)
     return best
 
 
-def _ranked_ids(best: dict[uuid.UUID, _H]) -> list[uuid.UUID]:
+def ranked_ids(best: dict[uuid.UUID, _H]) -> list[uuid.UUID]:
     return [hit.postmortem_id for hit in sorted(best.values(), key=lambda h: h.rank)]
 
 
@@ -111,17 +114,17 @@ async def hybrid_search(
     else:
         graph_hits = await _timed_graph()
 
-    vector_best = _best_hit_per_postmortem(vector_hits)
-    keyword_best = _best_hit_per_postmortem(keyword_hits)
-    graph_best = _best_hit_per_postmortem(graph_hits)
+    vector_best = best_hit_per_postmortem(vector_hits)
+    keyword_best = best_hit_per_postmortem(keyword_hits)
+    graph_best = best_hit_per_postmortem(graph_hits)
 
     ranked_lists: dict[str, list[uuid.UUID]] = {}
     if vector_best:
-        ranked_lists["vector"] = _ranked_ids(vector_best)
+        ranked_lists["vector"] = ranked_ids(vector_best)
     if keyword_best:
-        ranked_lists["keyword"] = _ranked_ids(keyword_best)
+        ranked_lists["keyword"] = ranked_ids(keyword_best)
     if graph_best:
-        ranked_lists["graph"] = _ranked_ids(graph_best)
+        ranked_lists["graph"] = ranked_ids(graph_best)
 
     fusion_start = time.monotonic()
     fused_scores = reciprocal_rank_fusion(ranked_lists, k=settings.rrf_k)

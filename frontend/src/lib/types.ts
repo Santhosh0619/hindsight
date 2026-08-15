@@ -342,3 +342,34 @@ export interface DashboardOut {
   fragile_services: FragileServiceOut[];
   recent_briefs: RecentBriefOut[];
 }
+
+// --- Evaluation (Phase 12) ---
+
+export type EvalRunMode = "vector" | "vector_bm25" | "full";
+
+export interface EvalRunOut {
+  id: string;
+  mode: EvalRunMode | null;
+  started_at: string;
+  finished_at: string | null;
+  recall_at_1: number | null;
+  recall_at_5: number | null;
+  mrr: number | null;
+  groundedness: number | null;
+  citation_validity: number | null;
+  cases_run: number;
+}
+
+export interface EvalCaseResultOut {
+  id: string;
+  eval_case_id: string;
+  case_name: string;
+  retrieved_ids: string[];
+  rank_of_first_hit: number | null;
+  groundedness: number | null;
+  passed: boolean;
+}
+
+export interface EvalRunDetailOut extends EvalRunOut {
+  results: EvalCaseResultOut[];
+}
