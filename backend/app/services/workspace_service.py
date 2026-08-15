@@ -269,12 +269,27 @@ async def remove_member(
 
 
 async def list_audit_log(
-    db: AsyncSession, *, workspace_id: uuid.UUID, cursor: str | None, limit: int
+    db: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    cursor: str | None,
+    limit: int,
+    actor_user_id: uuid.UUID | None = None,
+    action: str | None = None,
+    target_type: str | None = None,
 ) -> tuple[list[AuditLog], str | None]:
     # Returns raw ORM rows, not a CursorPage — CursorPage is a Pydantic generic model
     # and AuditLog (the SQLAlchemy class) isn't Pydantic-schema-generatable. The route
     # layer maps these rows into CursorPage[AuditLogEntryOut].
     query = select(AuditLog).where(AuditLog.workspace_id == workspace_id)
+    # Filtered server-side, before pagination -- filtering only the current page
+    # client-side would silently miss matches sitting on earlier/later pages.
+    if actor_user_id is not None:
+        query = query.where(AuditLog.actor_user_id == actor_user_id)
+    if action is not None:
+        query = query.where(AuditLog.action == action)
+    if target_type is not None:
+        query = query.where(AuditLog.target_type == target_type)
 
     if cursor is not None:
         cursor_created_at, cursor_id = decode_cursor(cursor)

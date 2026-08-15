@@ -1,7 +1,13 @@
 import { streamSse } from "@/lib/sse";
 import type {
+  AgentRunDetailOut,
+  AgentRunOut,
+  AgentRunStatsOut,
   AgentStreamEvent,
   ApiErrorBody,
+  ApiKeyCreatedOut,
+  ApiKeyOut,
+  AuditLogEntryOut,
   AuthResponse,
   BlastRadiusOut,
   BriefFeedbackCreate,
@@ -16,6 +22,9 @@ import type {
   IncidentOut,
   IncidentStatus,
   IncidentUpdate,
+  InviteCodeOut,
+  LLMProviderTestOut,
+  MemberOut,
   PostmortemCreate,
   PostmortemDetailOut,
   PostmortemOut,
@@ -24,6 +33,8 @@ import type {
   SearchResponseOut,
   ServiceOut,
   TeamOut,
+  WorkspaceOut,
+  WorkspaceRole,
 } from "@/lib/types";
 
 export const API_BASE_URL: string =
@@ -336,4 +347,121 @@ export function streamBrief(
   });
 
   return () => controller.abort();
+}
+
+// --- Members & workspace settings (Phase 2 backend, wrapped here for F13) ---
+
+export async function listMembers(workspaceId: string): Promise<MemberOut[]> {
+  return apiFetch<MemberOut[]>(`/api/v1/workspaces/${workspaceId}/members`);
+}
+
+export async function rotateInviteCode(workspaceId: string): Promise<InviteCodeOut> {
+  return apiFetch<InviteCodeOut>(`/api/v1/workspaces/${workspaceId}/members/invite-code`, {
+    method: "POST",
+  });
+}
+
+export async function changeMemberRole(
+  workspaceId: string,
+  userId: string,
+  role: WorkspaceRole
+): Promise<MemberOut> {
+  return apiFetch<MemberOut>(`/api/v1/workspaces/${workspaceId}/members/${userId}`, {
+    method: "PATCH",
+    body: { role },
+  });
+}
+
+export async function removeMember(workspaceId: string, userId: string): Promise<void> {
+  await apiFetch<void>(`/api/v1/workspaces/${workspaceId}/members/${userId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function updateWorkspace(
+  workspaceId: string,
+  payload: { name?: string; slug?: string }
+): Promise<WorkspaceOut> {
+  return apiFetch<WorkspaceOut>(`/api/v1/workspaces/${workspaceId}`, {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export async function deleteWorkspace(workspaceId: string): Promise<void> {
+  await apiFetch<void>(`/api/v1/workspaces/${workspaceId}`, { method: "DELETE" });
+}
+
+export interface ListAuditLogParams {
+  cursor?: string;
+  limit?: number;
+  actor_user_id?: string;
+  action?: string;
+  target_type?: string;
+}
+
+export async function getAuditLog(
+  workspaceId: string,
+  params: ListAuditLogParams = {}
+): Promise<CursorPage<AuditLogEntryOut>> {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) query.set(key, String(value));
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiFetch(`/api/v1/workspaces/${workspaceId}/audit-log${suffix}`);
+}
+
+// --- API Keys (Phase 13) ---
+
+export async function listApiKeys(workspaceId: string): Promise<ApiKeyOut[]> {
+  return apiFetch<ApiKeyOut[]>(`/api/v1/workspaces/${workspaceId}/apikeys`);
+}
+
+export async function createApiKey(workspaceId: string, name: string): Promise<ApiKeyCreatedOut> {
+  return apiFetch<ApiKeyCreatedOut>(`/api/v1/workspaces/${workspaceId}/apikeys`, {
+    method: "POST",
+    body: { name },
+  });
+}
+
+export async function revokeApiKey(workspaceId: string, keyId: string): Promise<void> {
+  await apiFetch<void>(`/api/v1/workspaces/${workspaceId}/apikeys/${keyId}`, {
+    method: "DELETE",
+  });
+}
+
+// --- LLM provider test (Phase 13) ---
+
+export async function testLlmProviders(workspaceId: string): Promise<LLMProviderTestOut[]> {
+  return apiFetch<LLMProviderTestOut[]>(`/api/v1/workspaces/${workspaceId}/settings/llm/test`, {
+    method: "POST",
+  });
+}
+
+// --- Agent Runs (Phase 13) ---
+
+export interface ListAgentRunsParams {
+  cursor?: string;
+  limit?: number;
+}
+
+export async function listAgentRuns(
+  workspaceId: string,
+  params: ListAgentRunsParams = {}
+): Promise<CursorPage<AgentRunOut>> {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) query.set(key, String(value));
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiFetch(`/api/v1/workspaces/${workspaceId}/agent-runs${suffix}`);
+}
+
+export async function getAgentRun(workspaceId: string, runId: string): Promise<AgentRunDetailOut> {
+  return apiFetch<AgentRunDetailOut>(`/api/v1/workspaces/${workspaceId}/agent-runs/${runId}`);
+}
+
+export async function getAgentRunStats(workspaceId: string): Promise<AgentRunStatsOut> {
+  return apiFetch<AgentRunStatsOut>(`/api/v1/workspaces/${workspaceId}/agent-runs/stats`);
 }

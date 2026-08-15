@@ -64,8 +64,10 @@ async def stream_graph_events(
                             node_name=name,
                             status="done",
                             latency_ms=latency_ms,
+                            tokens_in=int(output.get("step_tokens_in") or 0),
+                            tokens_out=int(output.get("step_tokens_out") or 0),
                             input_summary={},
-                            output_summary=_summarize(output),
+                            output_summary=_summarize(name, output),
                         )
                     )
                     await step_db.commit()
@@ -78,6 +80,35 @@ async def stream_graph_events(
     yield {"type": "done", "brief_id": str(brief_id) if brief_id else None}
 
 
-def _summarize(output: dict[str, Any]) -> dict[str, object]:
-    # Never the full state (chunk text, prompts) -- just which keys a node touched.
-    return {"updated_keys": sorted(output.keys())}
+def _summarize(name: str, output: dict[str, Any]) -> dict[str, object]:
+    # Never the full state (chunk text, prompts, hypothesis text) -- just enough to
+    # show what a step actually produced on F12's waterfall (FR-01/FR-06).
+    summary: dict[str, object] = {"updated_keys": sorted(output.keys())}
+
+    if name == "normalizer":
+        signal = output.get("signal")
+        if signal is not None:
+            summary["affected_service_count"] = len(signal.affected_service_ids)
+            summary["unresolved_mention_count"] = len(signal.unresolved_mentions)
+    elif name == "retriever":
+        retrieval = output.get("retrieval")
+        if retrieval is not None:
+            summary["result_count"] = len(retrieval.results)
+    elif name == "correlator":
+        candidates = output.get("candidates")
+        if candidates is not None:
+            summary["candidate_count"] = len(candidates)
+            if candidates:
+                summary["top_overall_score"] = candidates[0].overall_score
+    elif name == "analyst":
+        draft = output.get("draft")
+        if draft is not None:
+            summary["hypothesis_count"] = len(draft.hypotheses)
+            summary["runbook_step_count"] = len(draft.runbook_steps)
+    elif name == "critic":
+        verification = output.get("verification")
+        if verification is not None:
+            summary["score"] = verification.score
+            summary["invalid_citation_count"] = len(verification.invalid_citations)
+
+    return summary

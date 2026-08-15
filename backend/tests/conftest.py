@@ -103,3 +103,18 @@ class FakeModelProvider:
         agent = Agent(self._model, output_type=result_type, system_prompt=system)  # type: ignore[arg-type]
         result = await agent.run(prompt)
         return result.output
+
+    async def structured_with_usage(self, prompt: str, *, system: str, result_type: Any) -> Any:
+        from pydantic_ai import Agent
+
+        from app.services.llm.provider import LLMResponse
+
+        agent = Agent(self._model, output_type=result_type, system_prompt=system)  # type: ignore[arg-type]
+        result = await agent.run(prompt)
+        usage = LLMResponse(
+            text="",
+            tokens_in=result.usage.input_tokens,
+            tokens_out=result.usage.output_tokens,
+            model=self.model_name,
+        )
+        return result.output, usage

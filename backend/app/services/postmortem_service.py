@@ -74,7 +74,11 @@ async def _affected_services_by_postmortem_id(
 
 
 async def create_postmortem(
-    db: AsyncSession, *, workspace_id: uuid.UUID, created_by: uuid.UUID, payload: PostmortemCreate
+    db: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    created_by: uuid.UUID | None,
+    payload: PostmortemCreate,
 ) -> Postmortem:
     postmortem = Postmortem(
         workspace_id=workspace_id,

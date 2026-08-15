@@ -43,21 +43,24 @@ Step 3   EXPLORE    read existing code the module touches
 Step 4   DOCUMENT   write PRD + FRD + NFR → commit docs → then continue
 Step 5   CODE-BE    implement backend (FastAPI) against the documents
 Step 6   TEST-BE    ruff + mypy + pytest → 100% pass → fix failures → repeat
-Step 7   REVIEW-BE  spawn code-reviewer sub-agent → fix all BLOCKING → re-review
-Step 8   CODE-FE    implement frontend (React JS) against the same documents
-Step 9   TEST-FE    tsc + build + vitest → 100% pass → fix failures → repeat
-Step 10  REVIEW-FE  spawn code-reviewer sub-agent → fix all BLOCKING → re-review
-Step 11  TEST-E2E   spawn e2e-tester sub-agent → 100% pass → fix failures → repeat
-Step 12  PUSH       push branch → pre-push hook runs automatically
-Step 13  PR         create pull request with filled template
-Step 14  MERGE      merge after all CI checks green → delete branch
+Step 7   CODE-FE    implement frontend (React JS) against the same documents
+Step 8   TEST-FE    tsc + build + vitest → 100% pass → fix failures → repeat
+Step 9   REVIEW     spawn ONE code-reviewer sub-agent, once, covering backend AND
+                     frontend together → fix all BLOCKING → self-verify the fix
+                     (re-run the relevant lint/type/test commands); only re-spawn the
+                     sub-agent if a fix's correctness genuinely can't be confirmed
+                     without a fresh review pass
+Step 10  TEST-E2E   spawn e2e-tester sub-agent → 100% pass → fix failures → repeat
+Step 11  PUSH       push branch → pre-push hook runs automatically
+Step 12  PR         create pull request with filled template
+Step 13  MERGE      merge after all CI checks green → delete branch
 ```
 
 **Step 4 detail:** docs are committed before any code is written.
 Commit message: `docs(phase-N): add PRD, FRD, NFR for <module name>`
 Then and only then start Step 5.
 
-**Step 6 / Step 9 / Step 11 detail:** 100% pass means:
+**Step 6 / Step 8 / Step 10 detail:** 100% pass means:
 - Zero ruff errors
 - Zero mypy errors
 - Zero pytest failures
@@ -66,15 +69,21 @@ Then and only then start Step 5.
 - Zero e2e failures
 If any check fails, fix the code (not the test) and re-run from the top of that step.
 
+**Step 9 detail:** one code-reviewer sub-agent invocation per phase, not one per layer —
+spawning it twice (once for backend, once for frontend) burns tokens for little extra
+signal once both layers are already lint/type/test clean. Run it after both CODE-FE and
+TEST-FE are done, point it at the whole diff (backend + frontend), and only spawn it
+again if you can't otherwise confirm a BLOCKING fix actually landed correctly.
+
 ## Skills — Load Before Each Step
 
 - `git-safety` — active at all times
-- `branch-workflow` — Steps 1 and 14
+- `branch-workflow` — Steps 1 and 13
 - `document-writer` — Step 4
-- `test-runner` — Steps 6, 9
-- `code-reviewer` — Steps 7, 10 (spawned as sub-agent)
-- `e2e-tester` — Step 11 (spawned as sub-agent)
-- `pr-workflow` — Steps 13 and 14
+- `test-runner` — Steps 6, 8
+- `code-reviewer` — Step 9 (spawned as sub-agent, once, backend + frontend together)
+- `e2e-tester` — Step 10 (spawned as sub-agent)
+- `pr-workflow` — Steps 12 and 13
 
 ## Architecture Rules
 

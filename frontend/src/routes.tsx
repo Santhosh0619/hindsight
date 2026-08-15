@@ -3,6 +3,8 @@ import { Route, Routes } from "react-router-dom";
 import { AppShell } from "@/components/layout/AppShell";
 import { ProtectedRoute } from "@/lib/auth";
 import { SCREENS } from "@/lib/screens";
+import { AgentRuns } from "@/pages/AgentRuns";
+import { AuditLog } from "@/pages/AuditLog";
 import { Dashboard } from "@/pages/Dashboard";
 import { Evaluation } from "@/pages/Evaluation";
 import { IncidentDetail } from "@/pages/IncidentDetail";
@@ -15,6 +17,7 @@ import { Onboarding } from "@/pages/Onboarding";
 import { PostmortemDetail } from "@/pages/PostmortemDetail";
 import { Search } from "@/pages/Search";
 import { ServiceMap } from "@/pages/ServiceMap";
+import { Settings } from "@/pages/Settings";
 import { Signup } from "@/pages/Signup";
 import { StubRoute } from "@/pages/StubRoute";
 
@@ -28,6 +31,9 @@ const IMPLEMENTED_PAGES: Partial<Record<string, React.ComponentType>> = {
   "/knowledge-base": KnowledgeBase,
   "/dashboard": Dashboard,
   "/evaluation": Evaluation,
+  "/agent-runs": AgentRuns,
+  "/settings": Settings,
+  "/audit-log": AuditLog,
 };
 
 export function AppRoutes(): React.JSX.Element {

@@ -30,3 +30,16 @@ class GroqLLMProvider:
         agent = Agent(self._get_model(), output_type=result_type, system_prompt=system)
         result = await agent.run(prompt)
         return result.output
+
+    async def structured_with_usage(
+        self, prompt: str, *, system: str, result_type: type[T]
+    ) -> tuple[T, LLMResponse]:
+        agent = Agent(self._get_model(), output_type=result_type, system_prompt=system)
+        result = await agent.run(prompt)
+        usage = LLMResponse(
+            text="",
+            tokens_in=result.usage.input_tokens,
+            tokens_out=result.usage.output_tokens,
+            model=self.model_name,
+        )
+        return result.output, usage

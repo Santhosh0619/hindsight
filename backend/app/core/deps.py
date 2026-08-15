@@ -10,7 +10,8 @@ from app.core.errors import ForbiddenError, NotFoundError, UnauthorizedError
 from app.core.security import decode_access_token
 from app.db.session import get_db as _get_db
 from app.models.user import User
-from app.models.workspace import Workspace, WorkspaceMember, WorkspaceRole
+from app.models.workspace import ApiKey, Workspace, WorkspaceMember, WorkspaceRole
+from app.services.apikey_service import authenticate_key
 
 get_db = _get_db
 
@@ -105,3 +106,22 @@ def require_role_or_demo(
         )
 
     return _check
+
+
+async def get_api_key(
+    db: DbSession,
+    x_api_key: Annotated[str | None, Header()] = None,
+) -> ApiKey:
+    """Resolves the caller for `POST /ingest/postmortem` -- authenticated by a
+    workspace API key (`X-API-Key`), never a user session. Distinct from
+    `get_current_workspace`: there's no `workspace_id` path parameter to check
+    membership against here, since an external caller only knows its own key, never a
+    workspace id — both the workspace and the attribution for the postmortem it
+    creates (`created_by`) come from the key itself.
+    """
+    if x_api_key is None:
+        raise UnauthorizedError("Missing X-API-Key header")
+    return await authenticate_key(db, raw_key=x_api_key)
+
+
+CurrentApiKey = Annotated[ApiKey, Depends(get_api_key)]
