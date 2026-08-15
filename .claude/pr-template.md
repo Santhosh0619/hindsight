@@ -38,7 +38,7 @@
 - [ ] No AI attribution in any file, comment, commit, or string
 - [ ] No secret or credential committed
 - [ ] docs/decisions/ ADR written
-- [ ] docs/design-notes.md updated
+- [ ] Local design notes updated (gitignored, not part of this PR)
 
 ## Test results
 

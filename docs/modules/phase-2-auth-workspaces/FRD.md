@@ -173,8 +173,7 @@ exactly.
   - `write_audit_log(db, *, workspace_id, actor_user_id, action, target_type, target_id,
     meta) -> None` — the single write path every mutation above calls; FR-09's
     guarantee is enforced by every mutating function calling this before returning, not
-    by a generic ORM hook (explicit > implicit for something an reviewer will ask
-    about directly).
+    by a generic ORM hook (explicit > implicit for a guarantee this load-bearing).
 - `app/api/v1/auth.py`, `app/api/v1/workspaces.py` — thin FastAPI routers: parse
   request, call the service, set/read the refresh cookie, map the service's return value
   to the response schema. No business logic in the route functions themselves.
