@@ -30,3 +30,8 @@ class TokenBucket:
 
 
 demo_signup_bucket = TokenBucket(capacity=5, refill_seconds=12 * 60)
+
+# Bounds compute (and, once an LLM key exists, spend) a single already-minted demo
+# guest session can trigger via brief generation -- independent of demo_signup_bucket,
+# which only bounds how many guest sessions one IP can mint in the first place.
+demo_brief_bucket = TokenBucket(capacity=10, refill_seconds=10 * 60)

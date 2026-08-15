@@ -74,3 +74,26 @@ def require_role(
         return membership
 
     return _check
+
+
+def require_role_or_demo(
+    *roles: WorkspaceRole,
+) -> Callable[[WorkspaceMember, User], Coroutine[Any, Any, WorkspaceMember]]:
+    """Same as `require_role`, plus an escape hatch for demo guests.
+
+    A demo guest is always a VIEWER (Phase 2's `create_demo_guest`), so this widens
+    exactly the endpoints that pass it, not the role itself — every other
+    `require_role`-gated endpoint stays as unreachable to a demo guest as to any
+    other viewer.
+    """
+
+    async def _check(
+        membership: CurrentWorkspaceMember, current_user: CurrentUser
+    ) -> WorkspaceMember:
+        if membership.role in roles or current_user.is_demo:
+            return membership
+        raise ForbiddenError(
+            f"Role '{membership.role.value}' is not permitted to perform this action"
+        )
+
+    return _check
