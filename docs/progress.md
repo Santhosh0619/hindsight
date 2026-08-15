@@ -964,7 +964,7 @@ highlighting gap described below.
 
 Full detail on all findings and design rationale: ADR 0010.
 
-## Phase 11 — Seed Corpus & Demo Mode — done, PR open ([PR #12](https://github.com/Santhosh0619/hindsight/pull/12))
+## Phase 11 — Seed Corpus & Demo Mode — merged ([PR #12](https://github.com/Santhosh0619/hindsight/pull/12))
 
 Target checkpoint (Master-Prompt.md): `make seed` completes in under 5 minutes with
 no LLM key configured and produces byte-identical fixtures on regeneration; demo
@@ -1070,9 +1070,9 @@ slate.
 | 11. TEST-E2E | done | `e2e/tests/demo-mode.spec.ts` (3 tests): demo login lands in a workspace populated with the real seeded corpus (not empty-state) across Dashboard/Knowledge Base/Service Map; opening the precomputed connection_pool_exhaustion incident renders real hypotheses/citations/blast-radius/runbook with a "served from cache" badge; a demo guest generates a new brief end-to-end. `docker-compose.test.yml`'s `api-test`/`worker-test`/`web-test` images needed a one-time rebuild (stale since before `app/seed/` existed) before the stack's own conditional seed step could run. Verified twice: once incrementally, once after a full `down -v` + rebuild + fresh `up` — full suite (24 tests, 6 spec files) passes both times. Also fixed a rate-limiter test-isolation bug in the new spec itself (sequential X-Forwarded-For values collided with themselves across repeated manual reruns) before it ever landed. |
 | 12. PUSH | done | `feat/seed-corpus-demo-mode` pushed; pre-push hook (ruff, mypy, pytest 168/168, tsc, eslint, prettier, vitest 89/89, build, all in Docker) passed |
 | 13. PR | done | [#12](https://github.com/Santhosh0619/hindsight/pull/12) opened against `main` |
-| 14. MERGE | pending | awaiting explicit go-ahead |
+| 14. MERGE | done | merged to `main`; branch deleted locally and remotely |
 
-## Phase 12 — Evaluation Harness — done, PR open ([PR #13](https://github.com/Santhosh0619/hindsight/pull/13))
+## Phase 12 — Evaluation Harness — merged ([PR #13](https://github.com/Santhosh0619/hindsight/pull/13))
 
 Target checkpoint (Master-Prompt.md): `make eval MODE=full` produces numbers; all three
 modes produce a comparison table; the numbers are in the README.
@@ -1110,7 +1110,7 @@ render and interact correctly.
 | 11. TEST-E2E | done | `e2e/tests/evaluation.spec.ts` (2 tests) against `docker-compose.test.yml`, rebuilt fresh (this stack's images don't bind-mount source, unlike the dev stack — see below) with a new startup step seeding one real `EvalRun`. Full suite 26/26 passing; also fixed one pre-existing unrelated flake in `demo-mode.spec.ts` caught incidentally (see below). |
 | 12. PUSH | done | `feat/evaluation-harness` pushed; pre-push hook (ruff, mypy, pytest 185/185, tsc, eslint, prettier, vitest 104/104, build, all in Docker) passed |
 | 13. PR | done | [#13](https://github.com/Santhosh0619/hindsight/pull/13) opened against `main` |
-| 14. MERGE | pending | awaiting explicit go-ahead |
+| 14. MERGE | done | merged to `main`; branch deleted locally and remotely |
 
 ### The honest finding: all three ablation modes tied exactly on the real corpus
 
@@ -1165,8 +1165,69 @@ was actually measured rather than what was assumed. Full writeup: ADR 0012 §3.
 
 Full detail on all findings and design rationale: ADR 0012.
 
-## Phase 13 — Observability, Settings, API Keys — pending
-## Phase 13 — Observability, Settings, API Keys — pending
+## Phase 13 — Observability, Settings, API Keys — done, PR open
+
+Free-tier LLM keys are still unset this build session, so `POST .../settings/llm/test`
+correctly reports `gemini`/`groq` as `configured: false` and Ollama as reachable-or-not
+depending on the local stack — no fabricated success. Verified three ways: 12 new
+backend tests (apikeys, ingest webhook, agent-runs API, settings API — full suite
+207/207 clean, up from 201), 32 new frontend tests (`RunStatsCards`/`RunsTable`/
+`RunWaterfall`/`MembersPanel`/`ApiKeysPanel`/`LlmProviderPanel`/`DangerZonePanel` — 22
+component + `AgentRuns`/`Settings`/`AuditLog` — 10 page, all via `vitest`), and 4 new
+e2e tests against the real dev/test stack: the literal checkpoint (create an API key →
+POST a postmortem through the webhook → confirm it lands in the corpus → revoke → the
+same key now 401s), a Settings walkthrough (invite, promote a joined member to
+responder, confirm the audit log reflects it), and an RBAC extension confirming a
+responder sees `MembersPanel` but none of the three owner-only sub-panels while an owner
+sees all four.
+
+| Step | Status | Notes |
+|---|---|---|
+| 1. BRANCH | done | `feat/observability-settings-apikeys`, created from `main` after Phase 12 merged |
+| 2. READ | done | |
+| 3. EXPLORE | done | Reviewed the `LLMProvider` protocol/router (Phase 6), `agent_run`/`agent_run_steps` models and `stream_graph_events` (Phase 8), members/audit-log endpoints (Phase 2), and Phase 1's already-scaffolded `api_keys` table before writing docs |
+| 4. DOCUMENT | done | `docs/modules/phase-13-observability-settings-api-keys/{PRD,FRD,NFR}.md` committed (`7d2332d`) before any code; FRD's Settings role-gating section corrected mid-phase once built against `AppShell`'s real gate (`a83fb81`) |
+| 5. CODE-BE | done | Real per-node token usage retrofit (`structured_with_usage`, `judge_verification_with_usage`) plus the `generate_brief` step-writing fix (`5148a5e`); API keys + ingest webhook (`3f3969f`); agent-runs read API (`f3dcc00`); LLM provider test + audit-log filters (`424bc82`) |
+| 6. TEST-BE | done | `ruff`, `mypy --strict`, `pytest` (`d37c656`) — 207/207 clean, up from 201 (6 were briefly broken by a `FakeModelProvider` gap in `conftest.py` missing the new protocol method, fixed before landing) |
+| 7 (review, old process) | **APPROVED** | First pass: 1 BLOCKING (`llm_test_service` emitted zero `llm_provider_tested` events despite the NFR mandating one per slot) + 1 WARNING (`api_key_created`/`revoked` logged `workspace_id` instead of `actor_user_id`) — both fixed (`245828d`), targeted re-run confirmed (12/12), re-review independently confirmed both closed → 0/0/0 |
+| 8. CODE-FE | done | `RunStatsCards`/`RunsTable`/`RunWaterfall` + `pages/AgentRuns.tsx` (`ed0274a`); `MembersPanel`/`ApiKeysPanel`/`LlmProviderPanel`/`DangerZonePanel` + `pages/Settings.tsx` (`f3322ce`); `pages/AuditLog.tsx` (`3ef69f2`); wired into `routes.tsx`/`screens.ts` (`5f56279`) |
+| 9. TEST-FE | done | `tsc --noEmit`, `eslint`, `prettier --check`, `vitest` (136/136), `vite build` all clean |
+| 10 (review, old process) | **APPROVED** | Frontend-only pass, run separately from Step 7 per the process this phase still used: 0 blocking / 0 warnings on first pass — this is the last phase to run backend and frontend review as two separate sub-agent calls; see the workflow note below |
+| 11. TEST-E2E | done | `e2e/tests/observability-settings-apikeys.spec.ts` (2 tests) + an extension to `rbac-shell.spec.ts` (1 test) against `docker-compose.test.yml`, rebuilt fresh (same baked-image gotcha as every prior phase — see below). Full suite 29/29 passing |
+| 12. PUSH | done | `feat/observability-settings-apikeys` pushed; pre-push hook passed |
+| 13. PR | done | opened against `main` |
+| 14. MERGE | pending | awaiting explicit go-ahead |
+
+### A real production gap found while wiring up `agent_runs.brief_id`
+
+`generate_brief`'s non-streaming path called `graph.ainvoke` directly instead of going
+through `stream_graph_events` — meaning a real, token-spending brief generated through
+that endpoint never wrote a single `AgentRunStep` row. Not introduced this phase; found
+by reading the code while implementing FR-01/FR-02, not by a failing test. Fixed by
+routing both entry points through the same `stream_graph_events` function, with a
+regression test asserting the non-streaming path now writes a real step waterfall. See
+ADR 0013 §2.
+
+### Infra bug found only by rebuilding the e2e stack — a fourth occurrence
+
+Same root cause as ADR 0010 §5, ADR 0011, and ADR 0012 §6: `docker-compose.test.yml`'s
+`web-test`/`api-test`/`worker-test` don't bind-mount source, so the first e2e run
+against this phase's new frontend pages rendered `StubRoute`'s placeholder instead of
+the real pages, despite `tsc`/`vitest`/`build` all passing against the same source tree
+moments earlier. Fixed with an explicit `down` then `up -d --build --wait`. See ADR
+0013 §5.
+
+### Workflow change: code review is now one pass per phase, not one per layer
+
+Flagged mid-phase: spawning a code-reviewer sub-agent separately for backend (Step 7)
+and frontend (Step 10) doubles review cost for little extra signal once both layers are
+already lint/type/test clean. CLAUDE.md's Module Workflow was updated to merge the two
+into a single review step, run once after both layers are done. Phase 13 itself still
+ran the old two-pass way — the step numbers in the table above reflect the process as it
+existed when each step actually ran, not the renumbered workflow. See ADR 0013 §6.
+
+Full detail on all findings and design rationale: ADR 0013.
+
 ## Phase 14 — Hardening — pending
 ## Phase 15 — Tests — pending
 ## Phase 16 — CI & Containers — pending
