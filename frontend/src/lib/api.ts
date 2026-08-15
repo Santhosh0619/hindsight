@@ -10,6 +10,8 @@ import type {
   CatalogGraphOut,
   CursorPage,
   DashboardOut,
+  EvalRunDetailOut,
+  EvalRunOut,
   IncidentCreate,
   IncidentOut,
   IncidentStatus,
@@ -226,6 +228,14 @@ export async function getPostmortemStatus(
 
 export async function getDashboard(workspaceId: string): Promise<DashboardOut> {
   return apiFetch<DashboardOut>(`/api/v1/workspaces/${workspaceId}/dashboard`);
+}
+
+export async function listEvalRuns(workspaceId: string): Promise<EvalRunOut[]> {
+  return apiFetch<EvalRunOut[]>(`/api/v1/workspaces/${workspaceId}/evaluation/runs`);
+}
+
+export async function getEvalRun(workspaceId: string, runId: string): Promise<EvalRunDetailOut> {
+  return apiFetch<EvalRunDetailOut>(`/api/v1/workspaces/${workspaceId}/evaluation/runs/${runId}`);
 }
 
 export async function createIncident(

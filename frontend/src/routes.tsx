@@ -4,6 +4,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { ProtectedRoute } from "@/lib/auth";
 import { SCREENS } from "@/lib/screens";
 import { Dashboard } from "@/pages/Dashboard";
+import { Evaluation } from "@/pages/Evaluation";
 import { IncidentDetail } from "@/pages/IncidentDetail";
 import { IncidentList } from "@/pages/IncidentList";
 import { KnowledgeBase } from "@/pages/KnowledgeBase";
@@ -26,6 +27,7 @@ const IMPLEMENTED_PAGES: Partial<Record<string, React.ComponentType>> = {
   "/service-map": ServiceMap,
   "/knowledge-base": KnowledgeBase,
   "/dashboard": Dashboard,
+  "/evaluation": Evaluation,
 };
 
 export function AppRoutes(): React.JSX.Element {
