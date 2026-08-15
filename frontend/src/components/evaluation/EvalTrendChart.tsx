@@ -21,7 +21,44 @@ function formatRunTime(startedAt: string): string {
   );
 }
 
-export function EvalTrendChart({ runs }: { runs: EvalRunOut[] }): React.JSX.Element {
+interface TrendPoint {
+  id: string;
+  run: string;
+  recall_at_5: number | null;
+  mrr: number | null;
+}
+
+// recharts types a custom dot's `payload` as `any` (it can't know our data shape) --
+// this narrows it back to TrendPoint at the one point that matters, the click handler.
+function ClickableDot(props: {
+  cx?: number;
+  cy?: number;
+  payload?: TrendPoint;
+  fill: string;
+  onSelectRun: (runId: string) => void;
+}): React.JSX.Element | null {
+  const { cx, cy, payload, fill, onSelectRun } = props;
+  if (cx === undefined || cy === undefined || !payload) return null;
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={4}
+      fill={fill}
+      stroke="none"
+      style={{ cursor: "pointer" }}
+      onClick={() => onSelectRun(payload.id)}
+    />
+  );
+}
+
+export function EvalTrendChart({
+  runs,
+  onSelectRun,
+}: {
+  runs: EvalRunOut[];
+  onSelectRun: (runId: string) => void;
+}): React.JSX.Element {
   if (runs.length === 0) {
     return (
       <div className="flex h-52 items-center justify-center text-sm text-muted-foreground">
@@ -31,9 +68,10 @@ export function EvalTrendChart({ runs }: { runs: EvalRunOut[] }): React.JSX.Elem
   }
 
   // Oldest first, so the trend reads left-to-right chronologically.
-  const data = [...runs]
+  const data: TrendPoint[] = [...runs]
     .sort((a, b) => a.started_at.localeCompare(b.started_at))
     .map((run) => ({
+      id: run.id,
       run: formatRunTime(run.started_at),
       recall_at_5: run.recall_at_5,
       mrr: run.mrr,
@@ -60,7 +98,8 @@ export function EvalTrendChart({ runs }: { runs: EvalRunOut[] }): React.JSX.Elem
             stroke="var(--color-accent)"
             strokeWidth={2}
             connectNulls={false}
-            dot={{ r: 3 }}
+            dot={<ClickableDot fill="var(--color-accent)" onSelectRun={onSelectRun} />}
+            activeDot={<ClickableDot fill="var(--color-accent)" onSelectRun={onSelectRun} />}
           />
           <Line
             type="monotone"
@@ -69,7 +108,10 @@ export function EvalTrendChart({ runs }: { runs: EvalRunOut[] }): React.JSX.Elem
             stroke="var(--color-muted-foreground)"
             strokeWidth={2}
             connectNulls={false}
-            dot={{ r: 3 }}
+            dot={<ClickableDot fill="var(--color-muted-foreground)" onSelectRun={onSelectRun} />}
+            activeDot={
+              <ClickableDot fill="var(--color-muted-foreground)" onSelectRun={onSelectRun} />
+            }
           />
         </LineChart>
       </ResponsiveContainer>

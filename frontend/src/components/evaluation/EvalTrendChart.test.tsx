@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { EvalTrendChart } from "@/components/evaluation/EvalTrendChart";
 import type { EvalRunOut } from "@/lib/types";
@@ -22,7 +22,7 @@ function run(overrides: Partial<EvalRunOut>): EvalRunOut {
 
 describe("EvalTrendChart", () => {
   it("shows the empty-data message with no runs", () => {
-    render(<EvalTrendChart runs={[]} />);
+    render(<EvalTrendChart runs={[]} onSelectRun={vi.fn()} />);
 
     expect(
       screen.getByText("No evaluation runs yet -- run `make eval` to produce one.")
@@ -30,7 +30,7 @@ describe("EvalTrendChart", () => {
   });
 
   it("renders a chart when at least one run exists", () => {
-    const { container } = render(<EvalTrendChart runs={[run({})]} />);
+    const { container } = render(<EvalTrendChart runs={[run({})]} onSelectRun={vi.fn()} />);
 
     expect(container.querySelector(".recharts-responsive-container")).toBeInTheDocument();
   });

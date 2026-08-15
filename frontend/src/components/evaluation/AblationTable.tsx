@@ -66,9 +66,11 @@ export function AblationTable({
                   {run ? formatPercent(run.recall_at_1) : "not yet run"}
                 </td>
                 <td className="py-2 pr-4 tabular-nums">
-                  {run ? formatPercent(run.recall_at_5) : ""}
+                  {run ? formatPercent(run.recall_at_5) : "not yet run"}
                 </td>
-                <td className="py-2 tabular-nums">{run ? formatPercent(run.mrr) : ""}</td>
+                <td className="py-2 tabular-nums">
+                  {run ? formatPercent(run.mrr) : "not yet run"}
+                </td>
               </tr>
             );
           })}
