@@ -8,7 +8,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createIncident, listBriefs, streamBrief } from "@/lib/api";
-import { useAuth, useRequireRole } from "@/lib/auth";
+import { useAuth, useCanGenerateBrief } from "@/lib/auth";
 import type { AgentStreamEvent, BriefOut } from "@/lib/types";
 
 const SAMPLE_ALERTS = [
@@ -24,7 +24,7 @@ type Phase = "idle" | "generating" | "done" | "error";
 export function NewIncident(): React.JSX.Element {
   const { currentMembership } = useAuth();
   const workspaceId = currentMembership?.workspace_id ?? null;
-  const canWrite = useRequireRole("owner", "responder");
+  const canGenerateBrief = useCanGenerateBrief();
   const navigate = useNavigate();
 
   const [alertText, setAlertText] = React.useState("");
@@ -84,7 +84,7 @@ export function NewIncident(): React.JSX.Element {
     );
   };
 
-  if (!canWrite) {
+  if (!canGenerateBrief) {
     return (
       <>
         <PageHeader title="New Incident" />

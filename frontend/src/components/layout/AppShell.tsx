@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
+import { DemoBanner } from "@/components/layout/DemoBanner";
 import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -11,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
-import { useAuth, useRequireRole } from "@/lib/auth";
+import { useAuth, useCanGenerateBrief, useRequireRole } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { SCREENS } from "@/lib/screens";
 
@@ -20,14 +21,21 @@ export function AppShell(): React.JSX.Element {
   const navigate = useNavigate();
   // FR-07: Settings (F13) and New Incident (F5) are both write/admin surfaces --
   // Settings gates members & roles, API keys, LLM provider selection, workspace
-  // deletion (plan.md §6); New Incident triggers a real LLM-costing brief generation
-  // run. Both are hidden from viewers here, matching IncidentDetail's own
-  // useRequireRole gate on its Generate/Regenerate brief button. Every other write
-  // action described in FR-07 doesn't have UI yet and will be gated in the phase
-  // that builds it.
+  // deletion (plan.md §6), so it stays owner/responder-only even for a demo guest.
+  // New Incident triggers a brief-generation run, which a demo guest is deliberately
+  // carved out to do (Phase 11 FRD Gap #5) -- matching IncidentDetail's own
+  // useCanGenerateBrief gate on its Generate/Regenerate brief button. Every other
+  // write action described in FR-07 doesn't have UI yet and will be gated in the
+  // phase that builds it.
   const canWrite = useRequireRole("owner", "responder");
-  const GATED_PATHS = new Set(["/settings", "/incidents/new"]);
-  const visibleScreens = SCREENS.filter((screen) => !GATED_PATHS.has(screen.path) || canWrite);
+  const canGenerateBrief = useCanGenerateBrief();
+  const GATED_PATHS: Record<string, boolean> = {
+    "/settings": canWrite,
+    "/incidents/new": canGenerateBrief,
+  };
+  const visibleScreens = SCREENS.filter(
+    (screen) => !(screen.path in GATED_PATHS) || GATED_PATHS[screen.path]
+  );
 
   const handleLogout = async (): Promise<void> => {
     await logout();
@@ -114,10 +122,13 @@ export function AppShell(): React.JSX.Element {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto p-8">
-        <ErrorBoundary>
-          <Outlet />
-        </ErrorBoundary>
+      <main className="flex flex-1 flex-col overflow-y-auto">
+        <DemoBanner />
+        <div className="flex-1 p-8">
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
+        </div>
       </main>
     </div>
   );

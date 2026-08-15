@@ -157,6 +157,16 @@ export function useRequireRole(...roles: WorkspaceRole[]): boolean {
   return currentMembership !== null && roles.includes(currentMembership.role);
 }
 
+// A demo guest is always a VIEWER (Phase 2's create_demo_guest) but is carved out
+// on the backend (require_role_or_demo) to generate briefs against the seeded
+// corpus -- this hook mirrors that exact carve-out for the write affordances it
+// gates, rather than widening useRequireRole itself.
+// eslint-disable-next-line react-refresh/only-export-components
+export function useCanGenerateBrief(): boolean {
+  const { user } = useAuth();
+  return useRequireRole("owner", "responder") || Boolean(user?.is_demo);
+}
+
 export function ProtectedRoute(): React.JSX.Element {
   const { status } = useAuth();
   const location = useLocation();

@@ -6,10 +6,12 @@ import { AppShell } from "@/components/layout/AppShell";
 
 const mockUseAuth = vi.fn();
 const mockUseRequireRole = vi.fn();
+const mockUseCanGenerateBrief = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   useAuth: () => mockUseAuth(),
   useRequireRole: (...roles: string[]) => mockUseRequireRole(...roles),
+  useCanGenerateBrief: () => mockUseCanGenerateBrief(),
 }));
 
 function renderShell(): void {
@@ -41,6 +43,7 @@ describe("AppShell — FR-07 role gating", () => {
       logout: vi.fn(),
     });
     mockUseRequireRole.mockReturnValue(false);
+    mockUseCanGenerateBrief.mockReturnValue(false);
 
     renderShell();
 
@@ -65,10 +68,46 @@ describe("AppShell — FR-07 role gating", () => {
       logout: vi.fn(),
     });
     mockUseRequireRole.mockReturnValue(true);
+    mockUseCanGenerateBrief.mockReturnValue(true);
 
     renderShell();
 
     expect(screen.getByRole("link", { name: "Settings" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "New Incident" })).toBeInTheDocument();
+  });
+
+  it("shows the New Incident nav entry for a demo guest but hides Settings", () => {
+    mockUseAuth.mockReturnValue({
+      user: {
+        id: "3",
+        email: "guest@demo.hindsight.local",
+        full_name: "Demo Guest",
+        is_demo: true,
+      },
+      memberships: [
+        {
+          workspace_id: "w1",
+          workspace_name: "Demo Workspace",
+          workspace_slug: "demo",
+          role: "viewer",
+        },
+      ],
+      currentMembership: {
+        workspace_id: "w1",
+        workspace_name: "Demo Workspace",
+        workspace_slug: "demo",
+        role: "viewer",
+      },
+      setCurrentWorkspace: vi.fn(),
+      logout: vi.fn(),
+    });
+    mockUseRequireRole.mockReturnValue(false);
+    mockUseCanGenerateBrief.mockReturnValue(true);
+
+    renderShell();
+
+    expect(screen.getByRole("link", { name: "New Incident" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Settings" })).not.toBeInTheDocument();
+    expect(screen.getByText(/synthetic data, read-only/i)).toBeInTheDocument();
   });
 });
