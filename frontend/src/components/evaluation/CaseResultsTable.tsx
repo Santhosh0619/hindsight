@@ -19,20 +19,20 @@ export function CaseResultsTable({ results }: { results: EvalCaseResultOut[] }):
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border text-left text-xs text-muted-foreground">
-            <th className="pb-2 font-medium">Case</th>
-            <th className="pb-2 font-medium">Rank of first hit</th>
-            <th className="pb-2 font-medium">Groundedness</th>
+            <th className="pb-2 pr-4 font-medium">Case</th>
+            <th className="pb-2 pr-4 font-medium">Rank of first hit</th>
+            <th className="pb-2 pr-4 font-medium">Groundedness</th>
             <th className="pb-2 font-medium">Result</th>
           </tr>
         </thead>
         <tbody>
           {ordered.map((result) => (
             <tr key={result.id} className="border-b border-border last:border-0">
-              <td className="py-2">{result.case_name}</td>
-              <td className="py-2 tabular-nums">
+              <td className="py-2 pr-4">{result.case_name}</td>
+              <td className="py-2 pr-4 tabular-nums">
                 {result.rank_of_first_hit === null ? "not retrieved" : result.rank_of_first_hit}
               </td>
-              <td className="py-2 tabular-nums">{formatPercent(result.groundedness)}</td>
+              <td className="py-2 pr-4 tabular-nums">{formatPercent(result.groundedness)}</td>
               <td className="py-2">
                 <Badge variant={result.passed ? "success" : "destructive"}>
                   {result.passed ? "passed" : "failed"}
