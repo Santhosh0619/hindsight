@@ -10,6 +10,7 @@ from app.agents.build_graph import checkpointer_conn_string
 from app.api.v1.auth import router as auth_router
 from app.api.v1.catalog import router as catalog_router
 from app.api.v1.dashboard import router as dashboard_router
+from app.api.v1.evaluation import router as evaluation_router
 from app.api.v1.incidents import router as incidents_router
 from app.api.v1.postmortems import router as postmortems_router
 from app.api.v1.search import router as search_router
@@ -71,6 +72,7 @@ def create_app() -> FastAPI:
     app.include_router(incidents_router, prefix="/api/v1")
     app.include_router(search_router, prefix="/api/v1")
     app.include_router(dashboard_router, prefix="/api/v1")
+    app.include_router(evaluation_router, prefix="/api/v1")
 
     @app.get("/health")
     async def health() -> dict[str, object]:
