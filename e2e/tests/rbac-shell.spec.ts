@@ -99,4 +99,69 @@ test.describe("RBAC — viewer sees no write entry points (FR-07)", () => {
 
     await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
   });
+
+  test("a responder reaches Settings but sees only owner-only write panels absent; the owner sees all of them (FR-07)", async ({
+    page,
+  }) => {
+    const ownerEmail = uniqueEmail("e2e-settings-rbac-owner");
+    const responderEmail = uniqueEmail("e2e-settings-rbac-responder");
+
+    const owner = await signupViaApi("Settings RBAC Owner", ownerEmail);
+    const responder = await signupViaApi("Settings RBAC Responder", responderEmail);
+
+    const ownerCtx = await playwrightRequest.newContext({ baseURL: API_BASE_URL });
+    const inviteResp = await ownerCtx.post(
+      `/api/v1/workspaces/${owner.workspaceId}/members/invite-code`,
+      { headers: { Authorization: `Bearer ${owner.accessToken}` } }
+    );
+    const { code } = await inviteResp.json();
+
+    const responderCtx = await playwrightRequest.newContext({ baseURL: API_BASE_URL });
+    // A newly joined member is always a responder by default (Phase 2) -- no role
+    // patch needed here, unlike the viewer scenario above.
+    const joinResp = await responderCtx.post("/api/v1/workspaces/join", {
+      headers: { Authorization: `Bearer ${responder.accessToken}` },
+      data: { code },
+    });
+    expect(joinResp.ok(), await joinResp.text()).toBeTruthy();
+    await ownerCtx.dispose();
+    await responderCtx.dispose();
+
+    await page.goto("/login");
+    await page.getByLabel("Email").fill(responderEmail);
+    await page.getByLabel("Password").fill("correcthorse123");
+    await page.getByRole("button", { name: "Log in" }).click();
+    await expect(page).toHaveURL(/\/dashboard/);
+
+    await page.getByRole("button", { name: /workspace/i }).click();
+    await page.getByRole("menuitem", { name: new RegExp(owner.workspaceName) }).click();
+
+    // AppShell's Phase 3 gate (owner/responder) still lets a responder reach the page
+    // at all -- only the owner-only sub-panels inside it are gated (FRD "Role gating").
+    await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
+    await page.goto("/settings");
+    await expect(page.getByRole("heading", { name: "Members" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "API keys" })).not.toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "LLM provider connection" })
+    ).not.toBeVisible();
+    await expect(page.getByRole("heading", { name: "Danger zone" })).not.toBeVisible();
+    await expect(
+      page.getByText(
+        "API keys, LLM provider connectivity, and workspace administration are managed by an owner."
+      )
+    ).toBeVisible();
+
+    await page.context().clearCookies();
+    await page.goto("/login");
+    await page.getByLabel("Email").fill(ownerEmail);
+    await page.getByLabel("Password").fill("correcthorse123");
+    await page.getByRole("button", { name: "Log in" }).click();
+    await expect(page).toHaveURL(/\/dashboard/);
+
+    await page.goto("/settings");
+    await expect(page.getByRole("heading", { name: "API keys" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "LLM provider connection" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Danger zone" })).toBeVisible();
+  });
 });
