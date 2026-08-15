@@ -11,7 +11,11 @@ export function MetricCards({ run }: { run: EvalRunOut | null }): React.JSX.Elem
       <MetricCard label="Recall@1" value={formatPercent(run?.recall_at_1 ?? null)} />
       <MetricCard label="Recall@5" value={formatPercent(run?.recall_at_5 ?? null)} />
       <MetricCard label="MRR" value={formatPercent(run?.mrr ?? null)} />
-      <MetricCard label="Citation validity" value={formatPercent(run?.citation_validity ?? null)} />
+      <MetricCard
+        label="Citation validity"
+        value={formatPercent(run?.citation_validity ?? null)}
+        description={run && run.citation_validity === null ? "no citations to check" : undefined}
+      />
       <MetricCard
         label="Groundedness"
         value={formatPercent(run?.groundedness ?? null)}

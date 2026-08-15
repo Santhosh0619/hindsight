@@ -41,4 +41,10 @@ describe("MetricCards", () => {
     const dashes = screen.getAllByText("—");
     expect(dashes).toHaveLength(5);
   });
+
+  it("shows a dash and an explanatory note when citation_validity is null", () => {
+    render(<MetricCards run={{ ...RUN, citation_validity: null }} />);
+
+    expect(screen.getByText("no citations to check")).toBeInTheDocument();
+  });
 });
