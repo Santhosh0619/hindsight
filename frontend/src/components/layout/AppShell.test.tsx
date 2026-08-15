@@ -7,11 +7,13 @@ import { AppShell } from "@/components/layout/AppShell";
 const mockUseAuth = vi.fn();
 const mockUseRequireRole = vi.fn();
 const mockUseCanGenerateBrief = vi.fn();
+const mockUseIsDemoWorkspace = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   useAuth: () => mockUseAuth(),
   useRequireRole: (...roles: string[]) => mockUseRequireRole(...roles),
   useCanGenerateBrief: () => mockUseCanGenerateBrief(),
+  useIsDemoWorkspace: () => mockUseIsDemoWorkspace(),
 }));
 
 function renderShell(): void {
@@ -44,6 +46,7 @@ describe("AppShell — FR-07 role gating", () => {
     });
     mockUseRequireRole.mockReturnValue(false);
     mockUseCanGenerateBrief.mockReturnValue(false);
+    mockUseIsDemoWorkspace.mockReturnValue(false);
 
     renderShell();
 
@@ -69,6 +72,7 @@ describe("AppShell — FR-07 role gating", () => {
     });
     mockUseRequireRole.mockReturnValue(true);
     mockUseCanGenerateBrief.mockReturnValue(true);
+    mockUseIsDemoWorkspace.mockReturnValue(false);
 
     renderShell();
 
@@ -76,7 +80,7 @@ describe("AppShell — FR-07 role gating", () => {
     expect(screen.getByRole("link", { name: "New Incident" })).toBeInTheDocument();
   });
 
-  it("shows the New Incident nav entry for a demo guest but hides Settings", () => {
+  it("shows the New Incident nav entry and demo banner for a demo guest viewing the demo workspace", () => {
     mockUseAuth.mockReturnValue({
       user: {
         id: "3",
@@ -105,6 +109,7 @@ describe("AppShell — FR-07 role gating", () => {
     });
     mockUseRequireRole.mockReturnValue(false);
     mockUseCanGenerateBrief.mockReturnValue(true);
+    mockUseIsDemoWorkspace.mockReturnValue(true);
 
     renderShell();
 
@@ -114,9 +119,6 @@ describe("AppShell — FR-07 role gating", () => {
   });
 
   it("hides the demo banner for a demo guest viewing a real (non-demo) workspace", () => {
-    // DemoBanner reads currentMembership directly (via the real useAuth, not the
-    // mocked useCanGenerateBrief), so this guards its own workspace scoping
-    // independently of the hook-level regression test in lib/auth.test.tsx.
     mockUseAuth.mockReturnValue({
       user: {
         id: "3",
@@ -145,6 +147,7 @@ describe("AppShell — FR-07 role gating", () => {
     });
     mockUseRequireRole.mockReturnValue(false);
     mockUseCanGenerateBrief.mockReturnValue(false);
+    mockUseIsDemoWorkspace.mockReturnValue(false);
 
     renderShell();
 
