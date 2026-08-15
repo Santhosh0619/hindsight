@@ -157,20 +157,30 @@ export function useRequireRole(...roles: WorkspaceRole[]): boolean {
   return currentMembership !== null && roles.includes(currentMembership.role);
 }
 
+// Whether the caller is a demo guest currently viewing the demo workspace itself --
+// scoped to both the account (`user.is_demo`) and the workspace being viewed
+// (`currentMembership.workspace_is_demo`), mirroring the backend's
+// require_role_or_demo dependency exactly. A demo guest can join a real workspace
+// via invite code and must be bound by that workspace's own role there like any
+// other member, so checking `user.is_demo` alone would leak this everywhere the
+// account has membership, not just the demo workspace. Kept as the single source of
+// truth for this predicate -- every consumer reads it from here rather than
+// re-deriving it, so a future change can't update one call site and miss another.
+// eslint-disable-next-line react-refresh/only-export-components
+export function useIsDemoWorkspace(): boolean {
+  const { user, currentMembership } = useAuth();
+  return Boolean(user?.is_demo) && Boolean(currentMembership?.workspace_is_demo);
+}
+
 // A demo guest is always a VIEWER (Phase 2's create_demo_guest) but is carved out
 // on the backend (require_role_or_demo) to generate briefs against the seeded
 // corpus -- this hook mirrors that exact carve-out for the write affordances it
-// gates, rather than widening useRequireRole itself. Critically, the backend scopes
-// the carve-out to the demo workspace itself (not just the account), since a demo
-// guest can join a real workspace via invite code and must be bound by that
-// workspace's own role there like any other member -- checking `user.is_demo` alone
-// would show this affordance in a real workspace the account happens to also
-// belong to, so this also requires `currentMembership.workspace_is_demo`.
+// gates, rather than widening useRequireRole itself.
 // eslint-disable-next-line react-refresh/only-export-components
 export function useCanGenerateBrief(): boolean {
-  const { user, currentMembership } = useAuth();
-  const isDemoSession = Boolean(user?.is_demo) && Boolean(currentMembership?.workspace_is_demo);
-  return useRequireRole("owner", "responder") || isDemoSession;
+  const canWrite = useRequireRole("owner", "responder");
+  const isDemoWorkspace = useIsDemoWorkspace();
+  return canWrite || isDemoWorkspace;
 }
 
 export function ProtectedRoute(): React.JSX.Element {
