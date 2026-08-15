@@ -1,0 +1,102 @@
+[
+  {
+    "name": "connection_pool_exhaustion-primary",
+    "incident_text": "checkout is throwing 500s, database looks maxed out",
+    "expected_scenario_key": "connection_pool_exhaustion"
+  },
+  {
+    "name": "retry_storm-primary",
+    "incident_text": "traffic to the payment provider tripled out of nowhere",
+    "expected_scenario_key": "retry_storm"
+  },
+  {
+    "name": "cache_stampede-primary",
+    "incident_text": "origin database load spiked 40x for no obvious reason",
+    "expected_scenario_key": "cache_stampede"
+  },
+  {
+    "name": "poison_message-primary",
+    "incident_text": "consumers keep crash-looping on the notification queue",
+    "expected_scenario_key": "poison_message"
+  },
+  {
+    "name": "cert_expiry-primary",
+    "incident_text": "every request to the SSO provider is failing TLS handshake",
+    "expected_scenario_key": "cert_expiry"
+  },
+  {
+    "name": "disk_saturation-primary",
+    "incident_text": "writes failing against the primary database, disk might be full",
+    "expected_scenario_key": "disk_saturation"
+  },
+  {
+    "name": "config_rollout-primary",
+    "incident_text": "a chunk of requests failing right after the config push",
+    "expected_scenario_key": "config_rollout"
+  },
+  {
+    "name": "dependency_version_drift-primary",
+    "incident_text": "latency creeping up on the order path since the last deploy",
+    "expected_scenario_key": "dependency_version_drift"
+  },
+  {
+    "name": "clock_skew-primary",
+    "incident_text": "auth tokens getting rejected as expired right after they're issued",
+    "expected_scenario_key": "clock_skew"
+  },
+  {
+    "name": "thread_pool_starvation-primary",
+    "incident_text": "latency degrading across the board, not just one endpoint",
+    "expected_scenario_key": "thread_pool_starvation"
+  },
+  {
+    "name": "dns_failover-primary",
+    "incident_text": "some clients still failing even though the region's back up",
+    "expected_scenario_key": "dns_failover"
+  },
+  {
+    "name": "quota_exhaustion-primary",
+    "incident_text": "third-party calls all failing, might be rate limited",
+    "expected_scenario_key": "quota_exhaustion"
+  },
+  {
+    "name": "connection_pool_exhaustion-secondary",
+    "incident_text": "elevated error rate on the order path, DB connections all busy",
+    "expected_scenario_key": "connection_pool_exhaustion"
+  },
+  {
+    "name": "retry_storm-secondary",
+    "incident_text": "outbound call volume way above normal, provider says they're fine now",
+    "expected_scenario_key": "retry_storm"
+  },
+  {
+    "name": "cache_stampede-secondary",
+    "incident_text": "sudden latency spike right after a cache eviction",
+    "expected_scenario_key": "cache_stampede"
+  },
+  {
+    "name": "poison_message-secondary",
+    "incident_text": "queue lag climbing, workers keep restarting",
+    "expected_scenario_key": "poison_message"
+  },
+  {
+    "name": "cert_expiry-secondary",
+    "incident_text": "sudden total outage right at midnight, looks cert-related",
+    "expected_scenario_key": "cert_expiry"
+  },
+  {
+    "name": "config_rollout-secondary",
+    "incident_text": "errors started the moment the new flag value went live",
+    "expected_scenario_key": "config_rollout"
+  },
+  {
+    "name": "thread_pool_starvation-secondary",
+    "incident_text": "requests queueing up, thread pool looks maxed",
+    "expected_scenario_key": "thread_pool_starvation"
+  },
+  {
+    "name": "quota_exhaustion-secondary",
+    "incident_text": "every request to the external provider erroring since midday",
+    "expected_scenario_key": "quota_exhaustion"
+  }
+]
