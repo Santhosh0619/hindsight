@@ -76,7 +76,7 @@ export function Evaluation(): React.JSX.Element {
             <CardTitle className="text-base">Trend across runs</CardTitle>
           </CardHeader>
           <CardContent>
-            <EvalTrendChart runs={runs} />
+            <EvalTrendChart runs={runs} onSelectRun={setSelectedRunId} />
           </CardContent>
         </Card>
 

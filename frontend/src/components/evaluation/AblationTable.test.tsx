@@ -49,12 +49,15 @@ describe("AblationTable", () => {
     expect(screen.getByText("95%")).toBeInTheDocument();
   });
 
-  it("shows 'not yet run' for every mode without a run", () => {
+  it("shows 'not yet run' in every cell (not just the first column) for a mode without a run", () => {
     const runs: EvalRunOut[] = [run({ id: "full-1", mode: "full" })];
     render(<AblationTable runs={runs} onSelectRun={vi.fn()} />);
 
-    // vector and vector_bm25 both have no runs yet.
-    expect(screen.getAllByText("not yet run")).toHaveLength(2);
+    // vector and vector_bm25 both have no runs yet -- 3 columns (recall@1, recall@5,
+    // MRR) each, so 6 total, not just 2. A fix that only handles the first column
+    // would pass a getAllByText(...).toHaveLength(2) assertion despite leaving the
+    // other two columns blank -- this count is what actually catches that.
+    expect(screen.getAllByText("not yet run")).toHaveLength(6);
   });
 
   it("calls onSelectRun with the run id when a mode row is clicked", () => {
