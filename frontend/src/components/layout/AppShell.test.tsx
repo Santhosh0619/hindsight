@@ -89,6 +89,7 @@ describe("AppShell — FR-07 role gating", () => {
           workspace_id: "w1",
           workspace_name: "Demo Workspace",
           workspace_slug: "demo",
+          workspace_is_demo: true,
           role: "viewer",
         },
       ],
@@ -96,6 +97,7 @@ describe("AppShell — FR-07 role gating", () => {
         workspace_id: "w1",
         workspace_name: "Demo Workspace",
         workspace_slug: "demo",
+        workspace_is_demo: true,
         role: "viewer",
       },
       setCurrentWorkspace: vi.fn(),
@@ -109,5 +111,43 @@ describe("AppShell — FR-07 role gating", () => {
     expect(screen.getByRole("link", { name: "New Incident" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Settings" })).not.toBeInTheDocument();
     expect(screen.getByText(/synthetic data, read-only/i)).toBeInTheDocument();
+  });
+
+  it("hides the demo banner for a demo guest viewing a real (non-demo) workspace", () => {
+    // DemoBanner reads currentMembership directly (via the real useAuth, not the
+    // mocked useCanGenerateBrief), so this guards its own workspace scoping
+    // independently of the hook-level regression test in lib/auth.test.tsx.
+    mockUseAuth.mockReturnValue({
+      user: {
+        id: "3",
+        email: "guest@demo.hindsight.local",
+        full_name: "Demo Guest",
+        is_demo: true,
+      },
+      memberships: [
+        {
+          workspace_id: "w2",
+          workspace_name: "Real Workspace",
+          workspace_slug: "real",
+          workspace_is_demo: false,
+          role: "viewer",
+        },
+      ],
+      currentMembership: {
+        workspace_id: "w2",
+        workspace_name: "Real Workspace",
+        workspace_slug: "real",
+        workspace_is_demo: false,
+        role: "viewer",
+      },
+      setCurrentWorkspace: vi.fn(),
+      logout: vi.fn(),
+    });
+    mockUseRequireRole.mockReturnValue(false);
+    mockUseCanGenerateBrief.mockReturnValue(false);
+
+    renderShell();
+
+    expect(screen.queryByText(/synthetic data, read-only/i)).not.toBeInTheDocument();
   });
 });
