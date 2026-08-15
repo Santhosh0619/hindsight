@@ -108,10 +108,16 @@
   zone), a `justCreatedKey` string held only in memory for the "shown once" flow.
 - User interactions: invite/role-change/remove a member; rotate invite code; create/
   revoke an API key; run the LLM connection test; type-to-confirm workspace deletion.
-- Role gating: every write action in every panel is hidden for non-owners (the whole
-  page is owner-only per FR-07/plan.md §13's original scope — a responder/viewer sees
-  a read-only members list and nothing else, matching `AppShell`'s existing
-  `useRequireRole`-gated nav entry for Settings from Phase 3).
+- Role gating: `AppShell`'s existing Settings nav gate (Phase 3, `useRequireRole("owner",
+  "responder")`) is unchanged — a responder can still navigate to `/settings`, since the
+  members list itself (`GET .../members`) is a real any-role read on the backend, same
+  as this phase's other read endpoints. Within the page, `ApiKeysPanel`/
+  `LlmProviderPanel`/`DangerZonePanel` render only for `role === "owner"` (every one of
+  their backend endpoints is owner-only per FRD — Endpoints), with a one-line note for
+  a responder explaining an owner manages those; `MembersPanel` renders its read view
+  for both roles but hides invite/role-change/remove controls for a responder, matching
+  the member-mutation endpoints' own owner-only gate. A viewer never reaches this page
+  at all (excluded by `AppShell`'s existing gate, unchanged from Phase 3).
 
 ### `components/settings/MembersPanel.tsx`, `ApiKeysPanel.tsx`, `LlmProviderPanel.tsx`,
 `DangerZonePanel.tsx`
