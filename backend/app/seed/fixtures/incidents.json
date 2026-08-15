@@ -1,0 +1,86 @@
+[
+  {
+    "title": "Checkout is throwing 500s, database looks maxed out",
+    "raw_alert_text": "checkout is throwing 500s, database looks maxed out",
+    "severity": "sev2",
+    "matched_scenario_key": "connection_pool_exhaustion",
+    "has_precomputed_brief": true
+  },
+  {
+    "title": "Traffic to the payment provider tripled out of nowhere",
+    "raw_alert_text": "traffic to the payment provider tripled out of nowhere",
+    "severity": "sev3",
+    "matched_scenario_key": "retry_storm",
+    "has_precomputed_brief": true
+  },
+  {
+    "title": "Origin database load spiked 40x for no obvious reason",
+    "raw_alert_text": "origin database load spiked 40x for no obvious reason",
+    "severity": "sev2",
+    "matched_scenario_key": "cache_stampede",
+    "has_precomputed_brief": true
+  },
+  {
+    "title": "Consumers keep crash-looping on the notification queue",
+    "raw_alert_text": "consumers keep crash-looping on the notification queue",
+    "severity": "sev2",
+    "matched_scenario_key": "poison_message",
+    "has_precomputed_brief": true
+  },
+  {
+    "title": "Every request to the SSO provider is failing TLS handshake",
+    "raw_alert_text": "every request to the SSO provider is failing TLS handshake",
+    "severity": "sev1",
+    "matched_scenario_key": "cert_expiry",
+    "has_precomputed_brief": true
+  },
+  {
+    "title": "Writes failing against the primary database, disk might be full",
+    "raw_alert_text": "writes failing against the primary database, disk might be full",
+    "severity": "sev1",
+    "matched_scenario_key": "disk_saturation",
+    "has_precomputed_brief": false
+  },
+  {
+    "title": "A chunk of requests failing right after the config push",
+    "raw_alert_text": "a chunk of requests failing right after the config push",
+    "severity": "sev2",
+    "matched_scenario_key": "config_rollout",
+    "has_precomputed_brief": true
+  },
+  {
+    "title": "Latency creeping up on the order path since the last deploy",
+    "raw_alert_text": "latency creeping up on the order path since the last deploy",
+    "severity": "sev3",
+    "matched_scenario_key": "dependency_version_drift",
+    "has_precomputed_brief": false
+  },
+  {
+    "title": "Auth tokens getting rejected as expired right after they're issued",
+    "raw_alert_text": "auth tokens getting rejected as expired right after they're issued",
+    "severity": "sev2",
+    "matched_scenario_key": "clock_skew",
+    "has_precomputed_brief": false
+  },
+  {
+    "title": "Latency degrading across the board, not just one endpoint",
+    "raw_alert_text": "latency degrading across the board, not just one endpoint",
+    "severity": "sev3",
+    "matched_scenario_key": "thread_pool_starvation",
+    "has_precomputed_brief": true
+  },
+  {
+    "title": "Some clients still failing even though the region's back up",
+    "raw_alert_text": "some clients still failing even though the region's back up",
+    "severity": "sev2",
+    "matched_scenario_key": "dns_failover",
+    "has_precomputed_brief": false
+  },
+  {
+    "title": "Third-party calls all failing, might be rate limited",
+    "raw_alert_text": "third-party calls all failing, might be rate limited",
+    "severity": "sev3",
+    "matched_scenario_key": "quota_exhaustion",
+    "has_precomputed_brief": true
+  }
+]

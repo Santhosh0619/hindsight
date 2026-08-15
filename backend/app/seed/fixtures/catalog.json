@@ -1,0 +1,714 @@
+{
+  "import": {
+    "teams": [
+      {
+        "name": "Checkout",
+        "slack_handle": "#checkout-team",
+        "escalation_contact": "checkout-oncall@hindsight.demo"
+      },
+      {
+        "name": "Payments",
+        "slack_handle": "#payments-team",
+        "escalation_contact": "payments-oncall@hindsight.demo"
+      },
+      {
+        "name": "Identity",
+        "slack_handle": "#identity-team",
+        "escalation_contact": "identity-oncall@hindsight.demo"
+      },
+      {
+        "name": "Platform",
+        "slack_handle": "#platform-team",
+        "escalation_contact": "platform-oncall@hindsight.demo"
+      },
+      {
+        "name": "Search",
+        "slack_handle": "#search-team",
+        "escalation_contact": "search-oncall@hindsight.demo"
+      },
+      {
+        "name": "Notifications",
+        "slack_handle": "#notify-team",
+        "escalation_contact": "notify-oncall@hindsight.demo"
+      },
+      {
+        "name": "Catalog",
+        "slack_handle": "#catalog-team",
+        "escalation_contact": "catalog-oncall@hindsight.demo"
+      },
+      {
+        "name": "Observability",
+        "slack_handle": "#observability-team",
+        "escalation_contact": "observability-oncall@hindsight.demo"
+      }
+    ],
+    "services": [
+      {
+        "name": "checkout-api",
+        "tier": 1,
+        "team_name": "Checkout",
+        "description": "Public checkout entrypoint.",
+        "runbook_url": "https://runbooks.hindsight.demo/checkout-api"
+      },
+      {
+        "name": "cart-service",
+        "tier": 1,
+        "team_name": "Checkout",
+        "description": "Shopping cart state and pricing snapshot.",
+        "runbook_url": null
+      },
+      {
+        "name": "order-service",
+        "tier": 1,
+        "team_name": "Checkout",
+        "description": "Order creation and lifecycle.",
+        "runbook_url": "https://runbooks.hindsight.demo/order-service"
+      },
+      {
+        "name": "checkout-worker",
+        "tier": 2,
+        "team_name": "Checkout",
+        "description": "Background order finalization.",
+        "runbook_url": null
+      },
+      {
+        "name": "checkout-cache",
+        "tier": 2,
+        "team_name": "Checkout",
+        "description": "Cart/session read-through cache.",
+        "runbook_url": null
+      },
+      {
+        "name": "payments-svc",
+        "tier": 1,
+        "team_name": "Payments",
+        "description": "Payment orchestration.",
+        "runbook_url": "https://runbooks.hindsight.demo/payments-svc"
+      },
+      {
+        "name": "payment-gateway-adapter",
+        "tier": 1,
+        "team_name": "Payments",
+        "description": "Sole adapter to the external card processor.",
+        "runbook_url": "https://runbooks.hindsight.demo/payment-gateway-adapter"
+      },
+      {
+        "name": "ledger-service",
+        "tier": 2,
+        "team_name": "Payments",
+        "description": "Double-entry transaction ledger.",
+        "runbook_url": null
+      },
+      {
+        "name": "fraud-detection",
+        "tier": 2,
+        "team_name": "Payments",
+        "description": "Real-time fraud scoring.",
+        "runbook_url": null
+      },
+      {
+        "name": "payments-db",
+        "tier": 1,
+        "team_name": "Payments",
+        "description": "Payments domain datastore.",
+        "runbook_url": null
+      },
+      {
+        "name": "auth-service",
+        "tier": 1,
+        "team_name": "Identity",
+        "description": "Login, token issuance.",
+        "runbook_url": "https://runbooks.hindsight.demo/auth-service"
+      },
+      {
+        "name": "session-service",
+        "tier": 1,
+        "team_name": "Identity",
+        "description": "Sole session-validity authority; no fallback path.",
+        "runbook_url": "https://runbooks.hindsight.demo/session-service"
+      },
+      {
+        "name": "sso-gateway",
+        "tier": 2,
+        "team_name": "Identity",
+        "description": "Enterprise SSO federation.",
+        "runbook_url": null
+      },
+      {
+        "name": "user-profile-svc",
+        "tier": 2,
+        "team_name": "Identity",
+        "description": "User profile and preferences.",
+        "runbook_url": null
+      },
+      {
+        "name": "identity-db",
+        "tier": 2,
+        "team_name": "Identity",
+        "description": "Identity domain datastore.",
+        "runbook_url": null
+      },
+      {
+        "name": "postgres-primary",
+        "tier": 1,
+        "team_name": "Platform",
+        "description": "Shared relational store used by several domains.",
+        "runbook_url": "https://runbooks.hindsight.demo/postgres-primary"
+      },
+      {
+        "name": "redis-cache",
+        "tier": 1,
+        "team_name": "Platform",
+        "description": "Shared cache layer used across teams.",
+        "runbook_url": "https://runbooks.hindsight.demo/redis-cache"
+      },
+      {
+        "name": "message-bus",
+        "tier": 1,
+        "team_name": "Platform",
+        "description": "Shared event bus used across teams.",
+        "runbook_url": "https://runbooks.hindsight.demo/message-bus"
+      },
+      {
+        "name": "api-gateway",
+        "tier": 1,
+        "team_name": "Platform",
+        "description": "Edge routing for every public API.",
+        "runbook_url": "https://runbooks.hindsight.demo/api-gateway"
+      },
+      {
+        "name": "service-mesh-proxy",
+        "tier": 2,
+        "team_name": "Platform",
+        "description": "Sidecar proxy fleet.",
+        "runbook_url": null
+      },
+      {
+        "name": "search-api",
+        "tier": 2,
+        "team_name": "Search",
+        "description": "Search query entrypoint.",
+        "runbook_url": null
+      },
+      {
+        "name": "search-indexer",
+        "tier": 2,
+        "team_name": "Search",
+        "description": "Async document indexing.",
+        "runbook_url": null
+      },
+      {
+        "name": "elasticsearch-cluster",
+        "tier": 2,
+        "team_name": "Search",
+        "description": "Search index storage.",
+        "runbook_url": null
+      },
+      {
+        "name": "autocomplete-svc",
+        "tier": 3,
+        "team_name": "Search",
+        "description": "Typeahead suggestions.",
+        "runbook_url": null
+      },
+      {
+        "name": "search-cache",
+        "tier": 3,
+        "team_name": "Search",
+        "description": "Query result cache.",
+        "runbook_url": null
+      },
+      {
+        "name": "notification-svc",
+        "tier": 2,
+        "team_name": "Notifications",
+        "description": "Notification fan-out orchestration.",
+        "runbook_url": null
+      },
+      {
+        "name": "email-sender",
+        "tier": 2,
+        "team_name": "Notifications",
+        "description": "Transactional email delivery.",
+        "runbook_url": null
+      },
+      {
+        "name": "sms-gateway",
+        "tier": 3,
+        "team_name": "Notifications",
+        "description": "SMS delivery.",
+        "runbook_url": null
+      },
+      {
+        "name": "push-notification-svc",
+        "tier": 3,
+        "team_name": "Notifications",
+        "description": "Mobile push delivery.",
+        "runbook_url": null
+      },
+      {
+        "name": "notification-queue",
+        "tier": 2,
+        "team_name": "Notifications",
+        "description": "Per-channel delivery queue.",
+        "runbook_url": null
+      },
+      {
+        "name": "catalog-api",
+        "tier": 2,
+        "team_name": "Catalog",
+        "description": "Product catalog read API.",
+        "runbook_url": null
+      },
+      {
+        "name": "inventory-service",
+        "tier": 2,
+        "team_name": "Catalog",
+        "description": "Stock levels and reservations.",
+        "runbook_url": null
+      },
+      {
+        "name": "pricing-engine",
+        "tier": 2,
+        "team_name": "Catalog",
+        "description": "Price computation and promotions.",
+        "runbook_url": null
+      },
+      {
+        "name": "product-search",
+        "tier": 3,
+        "team_name": "Catalog",
+        "description": "Product-specific search facets.",
+        "runbook_url": null
+      },
+      {
+        "name": "catalog-db",
+        "tier": 2,
+        "team_name": "Catalog",
+        "description": "Catalog domain datastore.",
+        "runbook_url": null
+      },
+      {
+        "name": "metrics-collector",
+        "tier": 3,
+        "team_name": "Observability",
+        "description": "Metrics ingestion.",
+        "runbook_url": null
+      },
+      {
+        "name": "log-aggregator",
+        "tier": 3,
+        "team_name": "Observability",
+        "description": "Centralized log storage.",
+        "runbook_url": null
+      },
+      {
+        "name": "alerting-svc",
+        "tier": 3,
+        "team_name": "Observability",
+        "description": "Alert routing and paging.",
+        "runbook_url": null
+      },
+      {
+        "name": "cdn-edge",
+        "tier": 2,
+        "team_name": "Observability",
+        "description": "Edge CDN in front of the API gateway.",
+        "runbook_url": null
+      },
+      {
+        "name": "dns-resolver",
+        "tier": 2,
+        "team_name": "Observability",
+        "description": "Internal service-discovery DNS.",
+        "runbook_url": null
+      }
+    ],
+    "edges": [
+      {
+        "from_service_name": "api-gateway",
+        "to_service_name": "checkout-api",
+        "kind": "calls",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "api-gateway",
+        "to_service_name": "auth-service",
+        "kind": "calls",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "api-gateway",
+        "to_service_name": "catalog-api",
+        "kind": "calls",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "api-gateway",
+        "to_service_name": "search-api",
+        "kind": "calls",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "api-gateway",
+        "to_service_name": "notification-svc",
+        "kind": "calls",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "api-gateway",
+        "to_service_name": "dns-resolver",
+        "kind": "calls",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "cdn-edge",
+        "to_service_name": "api-gateway",
+        "kind": "calls",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "service-mesh-proxy",
+        "to_service_name": "api-gateway",
+        "kind": "calls",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "checkout-api",
+        "to_service_name": "cart-service",
+        "kind": "calls",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "checkout-api",
+        "to_service_name": "auth-service",
+        "kind": "calls",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "checkout-api",
+        "to_service_name": "payments-svc",
+        "kind": "calls",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "checkout-api",
+        "to_service_name": "checkout-cache",
+        "kind": "reads_from",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "cart-service",
+        "to_service_name": "catalog-api",
+        "kind": "calls",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "cart-service",
+        "to_service_name": "postgres-primary",
+        "kind": "reads_from",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "order-service",
+        "to_service_name": "postgres-primary",
+        "kind": "reads_from",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "order-service",
+        "to_service_name": "message-bus",
+        "kind": "publishes_to",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "checkout-worker",
+        "to_service_name": "message-bus",
+        "kind": "reads_from",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "checkout-worker",
+        "to_service_name": "order-service",
+        "kind": "calls",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "checkout-worker",
+        "to_service_name": "notification-svc",
+        "kind": "calls",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "payments-svc",
+        "to_service_name": "payment-gateway-adapter",
+        "kind": "calls",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "payments-svc",
+        "to_service_name": "ledger-service",
+        "kind": "calls",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "payments-svc",
+        "to_service_name": "fraud-detection",
+        "kind": "calls",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "payments-svc",
+        "to_service_name": "payments-db",
+        "kind": "reads_from",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "ledger-service",
+        "to_service_name": "payments-db",
+        "kind": "reads_from",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "fraud-detection",
+        "to_service_name": "redis-cache",
+        "kind": "reads_from",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "auth-service",
+        "to_service_name": "session-service",
+        "kind": "calls",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "auth-service",
+        "to_service_name": "identity-db",
+        "kind": "reads_from",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "session-service",
+        "to_service_name": "redis-cache",
+        "kind": "reads_from",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "sso-gateway",
+        "to_service_name": "auth-service",
+        "kind": "calls",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "user-profile-svc",
+        "to_service_name": "identity-db",
+        "kind": "reads_from",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "user-profile-svc",
+        "to_service_name": "postgres-primary",
+        "kind": "reads_from",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "user-profile-svc",
+        "to_service_name": "redis-cache",
+        "kind": "reads_from",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "search-api",
+        "to_service_name": "elasticsearch-cluster",
+        "kind": "reads_from",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "search-api",
+        "to_service_name": "search-cache",
+        "kind": "reads_from",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "search-indexer",
+        "to_service_name": "elasticsearch-cluster",
+        "kind": "publishes_to",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "search-indexer",
+        "to_service_name": "message-bus",
+        "kind": "reads_from",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "autocomplete-svc",
+        "to_service_name": "search-cache",
+        "kind": "reads_from",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "autocomplete-svc",
+        "to_service_name": "elasticsearch-cluster",
+        "kind": "reads_from",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "notification-svc",
+        "to_service_name": "notification-queue",
+        "kind": "publishes_to",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "notification-svc",
+        "to_service_name": "email-sender",
+        "kind": "calls",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "notification-svc",
+        "to_service_name": "sms-gateway",
+        "kind": "calls",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "notification-svc",
+        "to_service_name": "push-notification-svc",
+        "kind": "calls",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "email-sender",
+        "to_service_name": "notification-queue",
+        "kind": "reads_from",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "sms-gateway",
+        "to_service_name": "notification-queue",
+        "kind": "reads_from",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "push-notification-svc",
+        "to_service_name": "notification-queue",
+        "kind": "reads_from",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "catalog-api",
+        "to_service_name": "catalog-db",
+        "kind": "reads_from",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "catalog-api",
+        "to_service_name": "redis-cache",
+        "kind": "reads_from",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "inventory-service",
+        "to_service_name": "catalog-db",
+        "kind": "reads_from",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "inventory-service",
+        "to_service_name": "postgres-primary",
+        "kind": "publishes_to",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "inventory-service",
+        "to_service_name": "message-bus",
+        "kind": "publishes_to",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "pricing-engine",
+        "to_service_name": "catalog-db",
+        "kind": "reads_from",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "product-search",
+        "to_service_name": "elasticsearch-cluster",
+        "kind": "reads_from",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "product-search",
+        "to_service_name": "catalog-api",
+        "kind": "calls",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "metrics-collector",
+        "to_service_name": "message-bus",
+        "kind": "reads_from",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "log-aggregator",
+        "to_service_name": "message-bus",
+        "kind": "reads_from",
+        "criticality": "soft"
+      },
+      {
+        "from_service_name": "alerting-svc",
+        "to_service_name": "metrics-collector",
+        "kind": "calls",
+        "criticality": "hard"
+      },
+      {
+        "from_service_name": "alerting-svc",
+        "to_service_name": "log-aggregator",
+        "kind": "calls",
+        "criticality": "soft"
+      }
+    ]
+  },
+  "service_roles": {
+    "checkout-api": "web_frontend",
+    "cart-service": "business_logic",
+    "order-service": "business_logic",
+    "checkout-worker": "async_worker",
+    "checkout-cache": "cache",
+    "payments-svc": "business_logic",
+    "payment-gateway-adapter": "external_adapter",
+    "ledger-service": "business_logic",
+    "fraud-detection": "business_logic",
+    "payments-db": "primary_datastore",
+    "auth-service": "web_frontend",
+    "session-service": "business_logic",
+    "sso-gateway": "external_adapter",
+    "user-profile-svc": "business_logic",
+    "identity-db": "primary_datastore",
+    "postgres-primary": "primary_datastore",
+    "redis-cache": "cache",
+    "message-bus": "queue",
+    "api-gateway": "web_frontend",
+    "service-mesh-proxy": "infra",
+    "search-api": "web_frontend",
+    "search-indexer": "async_worker",
+    "elasticsearch-cluster": "primary_datastore",
+    "autocomplete-svc": "business_logic",
+    "search-cache": "cache",
+    "notification-svc": "business_logic",
+    "email-sender": "external_adapter",
+    "sms-gateway": "external_adapter",
+    "push-notification-svc": "external_adapter",
+    "notification-queue": "queue",
+    "catalog-api": "web_frontend",
+    "inventory-service": "business_logic",
+    "pricing-engine": "business_logic",
+    "product-search": "business_logic",
+    "catalog-db": "primary_datastore",
+    "metrics-collector": "infra",
+    "log-aggregator": "infra",
+    "alerting-svc": "infra",
+    "cdn-edge": "infra",
+    "dns-resolver": "infra"
+  }
+}

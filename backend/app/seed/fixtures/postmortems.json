@@ -1,0 +1,2742 @@
+[
+  {
+    "title": "payment-gateway-adapter: cert expiry (2)",
+    "raw_text": "Summary:\nAn expired TLS cert on payment-gateway-adapter broke every inbound connection the instant the clock passed midnight.\n\nTimeline:\nBecause the failure was so sudden and total, the team's first guess was a bad deploy that had gone out around the same time, which turned out to be unrelated.\n\nRoot Cause:\nThe certificate had a 90-day validity window and no automated renewal was ever wired up after the service was migrated to a new load balancer.\n\nImpact:\nA full outage of payment-gateway-adapter for all callers until the cert was manually replaced.\n\nRemediation:\nAutomated certificate renewal is now standard for every service behind this load balancer, not just newly provisioned ones.\n\nAction Items:\nAdd expiry monitoring across the whole certificate inventory, not just the ones known to be manually managed.",
+    "occurred_at": "2024-04-05T00:00:00Z",
+    "duration_minutes": 106,
+    "severity": "sev4",
+    "affected_service_names": [
+      "payment-gateway-adapter"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "An expired TLS cert on payment-gateway-adapter broke every inbound connection the instant the clock passed midnight.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The certificate had a 90-day validity window and no automated renewal was ever wired up after the service was migrated to a new load balancer.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Automated certificate renewal is now standard for every service behind this load balancer, not just newly provisioned ones.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "A full outage of payment-gateway-adapter for all callers until the cert was manually replaced.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "configuration_error",
+    "scenario_key": "cert_expiry"
+  },
+  {
+    "title": "cdn-edge: dns failover",
+    "raw_text": "Summary:\ncdn-edge failed to fail over to the secondary region because its DNS TTL was cached far longer than configured.\n\nTimeline:\nThe primary region's own outage was resolved quickly, but traffic kept failing well past that point, which was the actual mystery on-call had to chase down.\n\nRoot Cause:\nAn intermediate resolver ignored the configured 60-second TTL and cached the primary region's record for over twenty minutes, so clients kept trying the still-down primary long after failover should have redirected them.\n\nImpact:\nClients behind the misbehaving resolver saw failures for twenty extra minutes after the primary region itself had already recovered.\n\nRemediation:\nLowered the TTL further as a partial mitigation and added an application-level health check that doesn't depend on DNS propagation timing at all.\n\nAction Items:\nStop relying on DNS TTL alone for failover timing; treat it as best-effort, not guaranteed.",
+    "occurred_at": "2025-03-01T00:00:00Z",
+    "duration_minutes": 137,
+    "severity": "sev2",
+    "affected_service_names": [
+      "cdn-edge"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "cdn-edge failed to fail over to the secondary region because its DNS TTL was cached far longer than configured.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "An intermediate resolver ignored the configured 60-second TTL and cached the primary region's record for over twenty minutes, so clients kept trying the still-down primary long after failover should have redirected them.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Lowered the TTL further as a partial mitigation and added an application-level health check that doesn't depend on DNS propagation timing at all.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Clients behind the misbehaving resolver saw failures for twenty extra minutes after the primary region itself had already recovered.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "network_connectivity",
+    "scenario_key": "dns_failover"
+  },
+  {
+    "title": "postgres-primary: connection pool exhaustion",
+    "raw_text": "Summary:\npostgres-primary exhausted its outbound connection pool during a traffic spike, causing a five-minute window of elevated latency and request timeouts.\n\nTimeline:\nAt first the on-call engineer suspected a bad deploy from earlier that day and rolled it back, which did not help.\n\nRoot Cause:\nThe connection pool size was left at its default of 10, far below what the service's actual concurrent request volume required once traffic exceeded the previous quarter's peak.\n\nImpact:\nRoughly 8% of requests during the window returned a 503 or timed out client-side.\n\nRemediation:\nThe pool size was raised to 50 and a queueing timeout was added so exhaustion degrades gracefully instead of hanging connections indefinitely.\n\nAction Items:\nAdd pool-utilization alerting. Load-test the new pool size before the next seasonal traffic peak.\n\nDetection:\nNo alert fired on pool utilization itself -- only downstream request-latency alerts caught this, several minutes after the pool was already saturated.",
+    "occurred_at": "2025-08-07T00:00:00Z",
+    "duration_minutes": 108,
+    "severity": "sev3",
+    "affected_service_names": [
+      "postgres-primary"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "postgres-primary exhausted its outbound connection pool during a traffic spike, causing a five-minute window of elevated latency and request timeouts.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The connection pool size was left at its default of 10, far below what the service's actual concurrent request volume required once traffic exceeded the previous quarter's peak.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "The pool size was raised to 50 and a queueing timeout was added so exhaustion degrades gracefully instead of hanging connections indefinitely.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Roughly 8% of requests during the window returned a 503 or timed out client-side.",
+        "section_label": "Impact"
+      },
+      {
+        "fact_type": "detection_gap",
+        "statement": "No alert fired on pool utilization itself -- only downstream request-latency alerts caught this, several minutes after the pool was already saturated.",
+        "section_label": "Detection"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "connection_pool_exhaustion"
+  },
+  {
+    "title": "identity-db: connection pool exhaustion (2)",
+    "raw_text": "Summary:\nidentity-db exhausted its outbound connection pool during a traffic spike, causing a five-minute window of elevated latency and request timeouts.\n\nTimeline:\nAt first the on-call engineer suspected a bad deploy from earlier that day and rolled it back, which did not help.\n\nRoot Cause:\nThe connection pool size was left at its default of 10, far below what the service's actual concurrent request volume required once traffic exceeded the previous quarter's peak.\n\nImpact:\nRoughly 8% of requests during the window returned a 503 or timed out client-side.\n\nRemediation:\nThe pool size was raised to 50 and a queueing timeout was added so exhaustion degrades gracefully instead of hanging connections indefinitely.\n\nAction Items:\nAdd pool-utilization alerting. Load-test the new pool size before the next seasonal traffic peak.\n\nDetection:\nNo alert fired on pool utilization itself -- only downstream request-latency alerts caught this, several minutes after the pool was already saturated.",
+    "occurred_at": "2025-07-08T00:00:00Z",
+    "duration_minutes": 103,
+    "severity": "sev1",
+    "affected_service_names": [
+      "identity-db"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "identity-db exhausted its outbound connection pool during a traffic spike, causing a five-minute window of elevated latency and request timeouts.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The connection pool size was left at its default of 10, far below what the service's actual concurrent request volume required once traffic exceeded the previous quarter's peak.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "The pool size was raised to 50 and a queueing timeout was added so exhaustion degrades gracefully instead of hanging connections indefinitely.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Roughly 8% of requests during the window returned a 503 or timed out client-side.",
+        "section_label": "Impact"
+      },
+      {
+        "fact_type": "detection_gap",
+        "statement": "No alert fired on pool utilization itself -- only downstream request-latency alerts caught this, several minutes after the pool was already saturated.",
+        "section_label": "Detection"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "connection_pool_exhaustion"
+  },
+  {
+    "title": "auth-service: config rollout",
+    "raw_text": "Summary:\nAn unreviewed config push to auth-service flipped a flag to an invalid value and broke a required request path instantly.\n\nTimeline:\nThe rollout itself wasn't flagged as risky by anyone since it was 'just a config change,' which is exactly why it skipped the scrutiny a code change would have gotten.\n\nRoot Cause:\nNo schema validation existed for this particular flag's allowed values, so a typo produced a value the code silently treated as 'disabled' instead of raising an error.\n\nImpact:\nA full outage of the affected request path in auth-service until the config was rolled back.\n\nRemediation:\nAdded schema validation for every feature-flag value and required config changes to go through the same review gate as code.\n\nAction Items:\nRetroactively add schema validation to every existing flag, not just newly created ones.",
+    "occurred_at": "2023-07-08T00:00:00Z",
+    "duration_minutes": 85,
+    "severity": "sev2",
+    "affected_service_names": [
+      "auth-service"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "An unreviewed config push to auth-service flipped a flag to an invalid value and broke a required request path instantly.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "No schema validation existed for this particular flag's allowed values, so a typo produced a value the code silently treated as 'disabled' instead of raising an error.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Added schema validation for every feature-flag value and required config changes to go through the same review gate as code.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "A full outage of the affected request path in auth-service until the config was rolled back.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "configuration_error",
+    "scenario_key": "config_rollout"
+  },
+  {
+    "title": "payments-db: connection pool exhaustion (2)",
+    "raw_text": "Summary:\npayments-db ran out of available client slots under load, and every service depending on it queued behind the same limited pool.\n\nTimeline:\nAn initial hypothesis blamed a network partition between availability zones; packet captures ruled that out within twenty minutes.\n\nRoot Cause:\nA recent capacity-planning review had not accounted for a new caller that opened long-lived connections instead of releasing them between requests, silently consuming a growing share of the fixed pool.\n\nImpact:\nDownstream callers saw their own request queues back up, and the incident briefly looked like a multi-service outage before the shared root cause was found.\n\nRemediation:\nThe offending caller was patched to release connections properly, and a hard cap on per-caller pool share was added as a backstop.\n\nAction Items:\nAudit every other high-traffic caller for the same connection-lifecycle bug. Document the pool-sizing formula.",
+    "occurred_at": "2024-05-14T00:00:00Z",
+    "duration_minutes": 37,
+    "severity": "sev3",
+    "affected_service_names": [
+      "payments-db"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "payments-db ran out of available client slots under load, and every service depending on it queued behind the same limited pool.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A recent capacity-planning review had not accounted for a new caller that opened long-lived connections instead of releasing them between requests, silently consuming a growing share of the fixed pool.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "The offending caller was patched to release connections properly, and a hard cap on per-caller pool share was added as a backstop.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Downstream callers saw their own request queues back up, and the incident briefly looked like a multi-service outage before the shared root cause was found.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "connection_pool_exhaustion"
+  },
+  {
+    "title": "ledger-service: thread pool starvation",
+    "raw_text": "Summary:\nledger-service's shared worker pool was starved by one endpoint's unbounded downstream call, degrading every other endpoint that shared the same pool.\n\nTimeline:\nOn-call initially scaled up the instance count, which helped only briefly before the larger pool starved the same way under continued load.\n\nRoot Cause:\nThe pool-starving endpoint had no circuit breaker and no timeout, so each slow downstream call held its thread for the full length of the downstream's own hang.\n\nImpact:\nEvery endpoint sharing the pool saw degraded latency, widening what looked at first like an isolated problem into a service-wide one.\n\nRemediation:\nIsolated the offending endpoint into its own bounded thread pool with a hard timeout, so it can now only ever starve itself.\n\nAction Items:\nApply the same per-endpoint pool isolation to every other endpoint making a downstream call with no timeout.",
+    "occurred_at": "2025-02-12T00:00:00Z",
+    "duration_minutes": 103,
+    "severity": "sev2",
+    "affected_service_names": [
+      "ledger-service"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "ledger-service's shared worker pool was starved by one endpoint's unbounded downstream call, degrading every other endpoint that shared the same pool.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The pool-starving endpoint had no circuit breaker and no timeout, so each slow downstream call held its thread for the full length of the downstream's own hang.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Isolated the offending endpoint into its own bounded thread pool with a hard timeout, so it can now only ever starve itself.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Every endpoint sharing the pool saw degraded latency, widening what looked at first like an isolated problem into a service-wide one.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "thread_pool_starvation"
+  },
+  {
+    "title": "log-aggregator: clock skew",
+    "raw_text": "Summary:\nAn NTP sync failure let log-aggregator's clock drift far enough that time-based auth tokens started being rejected as expired the moment they were issued.\n\nTimeline:\nThe first theory was a bug in the token-issuing code itself, since the tokens looked correctly formed -- just always expired.\n\nRoot Cause:\nThe NTP daemon on the affected host had silently stopped syncing three days earlier, and the host's clock had drifted almost four minutes ahead of real time by the time tokens started failing validation.\n\nImpact:\nEvery token issued from the affected host was rejected downstream as already expired.\n\nRemediation:\nRestarted NTP sync and added host-level clock-drift alerting instead of relying on NTP daemon health alone.\n\nAction Items:\nAudit every host's NTP daemon status rather than assuming it's running because it was configured to be.",
+    "occurred_at": "2024-03-20T00:00:00Z",
+    "duration_minutes": 174,
+    "severity": "sev4",
+    "affected_service_names": [
+      "log-aggregator"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "An NTP sync failure let log-aggregator's clock drift far enough that time-based auth tokens started being rejected as expired the moment they were issued.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The NTP daemon on the affected host had silently stopped syncing three days earlier, and the host's clock had drifted almost four minutes ahead of real time by the time tokens started failing validation.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Restarted NTP sync and added host-level clock-drift alerting instead of relying on NTP daemon health alone.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Every token issued from the affected host was rejected downstream as already expired.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "infrastructure_hardware",
+    "scenario_key": "clock_skew"
+  },
+  {
+    "title": "cart-service: dependency version drift",
+    "raw_text": "Summary:\nA minor version bump of a shared library used by cart-service silently changed a default timeout, and nobody caught it in review.\n\nTimeline:\nThe regression only showed up under real production load, since the staging environment's traffic volume never exercised the changed timeout.\n\nRoot Cause:\nThe library's changelog didn't call out the default value change as breaking, and the team's dependency-update process didn't include reading the diff of default values, only the changelog's own headline bullets.\n\nImpact:\nA subset of requests through cart-service began timing out under peak load that had previously completed successfully.\n\nRemediation:\nPinned the previous default explicitly rather than relying on the library's default, and added a load test to the dependency-upgrade checklist.\n\nAction Items:\nReview every other shared library dependency for implicitly-relied-upon default values.",
+    "occurred_at": "2023-11-24T00:00:00Z",
+    "duration_minutes": 96,
+    "severity": "sev3",
+    "affected_service_names": [
+      "cart-service"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A minor version bump of a shared library used by cart-service silently changed a default timeout, and nobody caught it in review.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The library's changelog didn't call out the default value change as breaking, and the team's dependency-update process didn't include reading the diff of default values, only the changelog's own headline bullets.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Pinned the previous default explicitly rather than relying on the library's default, and added a load test to the dependency-upgrade checklist.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "A subset of requests through cart-service began timing out under peak load that had previously completed successfully.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "dependency_failure",
+    "scenario_key": "dependency_version_drift"
+  },
+  {
+    "title": "sms-gateway: quota exhaustion",
+    "raw_text": "Summary:\nGrowing call volume to sms-gateway finally crossed an external quota limit nobody had been watching, and every call past that point failed outright.\n\nTimeline:\nRetries against the quota-exceeded error just kept failing identically, which at least ruled out a transient network issue quickly.\n\nRoot Cause:\nThe provider's quota was set based on usage projections from over a year earlier and had never been revisited as the integration's traffic grew.\n\nImpact:\nAll calls to sms-gateway failed for the remainder of the billing window.\n\nRemediation:\nNegotiated a higher quota with the provider and added proactive usage alerting well before the new limit.\n\nAction Items:\nEstablish a recurring quarterly review of usage against quota for every metered external dependency.",
+    "occurred_at": "2023-08-24T00:00:00Z",
+    "duration_minutes": 105,
+    "severity": "sev3",
+    "affected_service_names": [
+      "sms-gateway"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "Growing call volume to sms-gateway finally crossed an external quota limit nobody had been watching, and every call past that point failed outright.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The provider's quota was set based on usage projections from over a year earlier and had never been revisited as the integration's traffic grew.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Negotiated a higher quota with the provider and added proactive usage alerting well before the new limit.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "All calls to sms-gateway failed for the remainder of the billing window.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "quota_exhaustion"
+  },
+  {
+    "title": "metrics-collector: clock skew",
+    "raw_text": "Summary:\nA drifting system clock on one host running metrics-collector caused every short-lived token it issued to look already expired to everyone else.\n\nTimeline:\nBecause only one host out of the fleet was affected, the failure was intermittent and initially looked like a flaky-test-style false alarm rather than a real, ongoing issue.\n\nRoot Cause:\nA virtualization-layer change had disabled the hypervisor's own time synchronization for one host in the fleet, and that host's local NTP client never caught the resulting drift.\n\nImpact:\nRoughly one-fourth of requests -- the fraction routed to the drifting host -- failed token validation.\n\nRemediation:\nRe-enabled hypervisor time sync and added a fleet-wide clock-drift check independent of NTP daemon status.\n\nAction Items:\nAdd the clock-drift check to the standard host health check run before a host is added back to rotation.",
+    "occurred_at": "2024-10-30T00:00:00Z",
+    "duration_minutes": 70,
+    "severity": "sev2",
+    "affected_service_names": [
+      "metrics-collector"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A drifting system clock on one host running metrics-collector caused every short-lived token it issued to look already expired to everyone else.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A virtualization-layer change had disabled the hypervisor's own time synchronization for one host in the fleet, and that host's local NTP client never caught the resulting drift.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Re-enabled hypervisor time sync and added a fleet-wide clock-drift check independent of NTP daemon status.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Roughly one-fourth of requests -- the fraction routed to the drifting host -- failed token validation.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "infrastructure_hardware",
+    "scenario_key": "clock_skew"
+  },
+  {
+    "title": "dns-resolver: dns failover",
+    "raw_text": "Summary:\nFailover for dns-resolver didn't take effect as fast as expected because a resolver somewhere in the path held onto a stale DNS record.\n\nTimeline:\nSome clients recovered immediately when the primary region came back up, while others stayed broken for another twenty minutes -- the split behavior was the first clue this was a DNS caching issue rather than a still-ongoing outage.\n\nRoot Cause:\nA caching resolver operated outside the team's own infrastructure did not honor the record's TTL, extending the effective outage window well past the configured failover time for anyone routed through it.\n\nImpact:\nA subset of clients experienced an extended outage window of about twenty minutes beyond the primary region's own recovery.\n\nRemediation:\nAdded an application-level health check as a second failover mechanism that doesn't depend on DNS caching behavior outside the team's control.\n\nAction Items:\nDocument which resolvers in the request path are outside the team's control and can't be trusted to honor TTL.",
+    "occurred_at": "2025-05-17T00:00:00Z",
+    "duration_minutes": 38,
+    "severity": "sev1",
+    "affected_service_names": [
+      "dns-resolver"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "Failover for dns-resolver didn't take effect as fast as expected because a resolver somewhere in the path held onto a stale DNS record.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A caching resolver operated outside the team's own infrastructure did not honor the record's TTL, extending the effective outage window well past the configured failover time for anyone routed through it.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Added an application-level health check as a second failover mechanism that doesn't depend on DNS caching behavior outside the team's control.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "A subset of clients experienced an extended outage window of about twenty minutes beyond the primary region's own recovery.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "network_connectivity",
+    "scenario_key": "dns_failover"
+  },
+  {
+    "title": "payments-db: connection pool exhaustion",
+    "raw_text": "Summary:\npayments-db exhausted its outbound connection pool during a traffic spike, causing a five-minute window of elevated latency and request timeouts.\n\nTimeline:\nAt first the on-call engineer suspected a bad deploy from earlier that day and rolled it back, which did not help.\n\nRoot Cause:\nThe connection pool size was left at its default of 10, far below what the service's actual concurrent request volume required once traffic exceeded the previous quarter's peak.\n\nImpact:\nRoughly 8% of requests during the window returned a 503 or timed out client-side.\n\nRemediation:\nThe pool size was raised to 50 and a queueing timeout was added so exhaustion degrades gracefully instead of hanging connections indefinitely.\n\nAction Items:\nAdd pool-utilization alerting. Load-test the new pool size before the next seasonal traffic peak.\n\nDetection:\nNo alert fired on pool utilization itself -- only downstream request-latency alerts caught this, several minutes after the pool was already saturated.",
+    "occurred_at": "2024-07-30T00:00:00Z",
+    "duration_minutes": 86,
+    "severity": "sev3",
+    "affected_service_names": [
+      "payments-db"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "payments-db exhausted its outbound connection pool during a traffic spike, causing a five-minute window of elevated latency and request timeouts.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The connection pool size was left at its default of 10, far below what the service's actual concurrent request volume required once traffic exceeded the previous quarter's peak.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "The pool size was raised to 50 and a queueing timeout was added so exhaustion degrades gracefully instead of hanging connections indefinitely.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Roughly 8% of requests during the window returned a 503 or timed out client-side.",
+        "section_label": "Impact"
+      },
+      {
+        "fact_type": "detection_gap",
+        "statement": "No alert fired on pool utilization itself -- only downstream request-latency alerts caught this, several minutes after the pool was already saturated.",
+        "section_label": "Detection"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "connection_pool_exhaustion"
+  },
+  {
+    "title": "identity-db: connection pool exhaustion",
+    "raw_text": "Summary:\nidentity-db ran out of available client slots under load, and every service depending on it queued behind the same limited pool.\n\nTimeline:\nAn initial hypothesis blamed a network partition between availability zones; packet captures ruled that out within twenty minutes.\n\nRoot Cause:\nA recent capacity-planning review had not accounted for a new caller that opened long-lived connections instead of releasing them between requests, silently consuming a growing share of the fixed pool.\n\nImpact:\nDownstream callers saw their own request queues back up, and the incident briefly looked like a multi-service outage before the shared root cause was found.\n\nRemediation:\nThe offending caller was patched to release connections properly, and a hard cap on per-caller pool share was added as a backstop.\n\nAction Items:\nAudit every other high-traffic caller for the same connection-lifecycle bug. Document the pool-sizing formula.",
+    "occurred_at": "2025-06-01T00:00:00Z",
+    "duration_minutes": 77,
+    "severity": "sev3",
+    "affected_service_names": [
+      "identity-db"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "identity-db ran out of available client slots under load, and every service depending on it queued behind the same limited pool.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A recent capacity-planning review had not accounted for a new caller that opened long-lived connections instead of releasing them between requests, silently consuming a growing share of the fixed pool.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "The offending caller was patched to release connections properly, and a hard cap on per-caller pool share was added as a backstop.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Downstream callers saw their own request queues back up, and the incident briefly looked like a multi-service outage before the shared root cause was found.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "connection_pool_exhaustion"
+  },
+  {
+    "title": "checkout-api: config rollout",
+    "raw_text": "Summary:\nA configuration rollout to checkout-api shipped a typo'd feature-flag value that disabled a required code path for every request.\n\nTimeline:\nBecause the deploy itself looked healthy in the pipeline, the team spent the first ten minutes ruling out a code regression before checking the configuration change.\n\nRoot Cause:\nThe config change was pushed directly through the admin panel rather than through the reviewed pipeline, so the typo skipped both code review and the pipeline's own validation step.\n\nImpact:\nEvery request to checkout-api hit the disabled code path and returned an error for the duration of the incident.\n\nRemediation:\nConfig changes now go through the same reviewed pipeline as code, with a validation step that rejects unknown flag values instead of silently accepting them.\n\nAction Items:\nClose the admin-panel direct-edit path entirely, or at minimum require the same review as a code change.",
+    "occurred_at": "2025-12-27T00:00:00Z",
+    "duration_minutes": 154,
+    "severity": "sev2",
+    "affected_service_names": [
+      "checkout-api"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A configuration rollout to checkout-api shipped a typo'd feature-flag value that disabled a required code path for every request.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The config change was pushed directly through the admin panel rather than through the reviewed pipeline, so the typo skipped both code review and the pipeline's own validation step.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Config changes now go through the same reviewed pipeline as code, with a validation step that rejects unknown flag values instead of silently accepting them.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Every request to checkout-api hit the disabled code path and returned an error for the duration of the incident.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "configuration_error",
+    "scenario_key": "config_rollout"
+  },
+  {
+    "title": "sso-gateway: quota exhaustion",
+    "raw_text": "Summary:\nGrowing call volume to sso-gateway finally crossed an external quota limit nobody had been watching, and every call past that point failed outright.\n\nTimeline:\nRetries against the quota-exceeded error just kept failing identically, which at least ruled out a transient network issue quickly.\n\nRoot Cause:\nThe provider's quota was set based on usage projections from over a year earlier and had never been revisited as the integration's traffic grew.\n\nImpact:\nAll calls to sso-gateway failed for the remainder of the billing window.\n\nRemediation:\nNegotiated a higher quota with the provider and added proactive usage alerting well before the new limit.\n\nAction Items:\nEstablish a recurring quarterly review of usage against quota for every metered external dependency.",
+    "occurred_at": "2024-11-13T00:00:00Z",
+    "duration_minutes": 179,
+    "severity": "sev3",
+    "affected_service_names": [
+      "sso-gateway"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "Growing call volume to sso-gateway finally crossed an external quota limit nobody had been watching, and every call past that point failed outright.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The provider's quota was set based on usage projections from over a year earlier and had never been revisited as the integration's traffic grew.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Negotiated a higher quota with the provider and added proactive usage alerting well before the new limit.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "All calls to sso-gateway failed for the remainder of the billing window.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "quota_exhaustion"
+  },
+  {
+    "title": "email-sender: retry storm",
+    "raw_text": "Summary:\nA brief upstream blip on email-sender triggered a retry storm that outlasted the original outage by twenty minutes.\n\nTimeline:\nOn-call first assumed the upstream provider was still down, but the provider's own status page had already recovered five minutes earlier.\n\nRoot Cause:\nEvery caller retried failed requests immediately with no backoff or jitter, so the moment the upstream recovered it was immediately re-saturated by a synchronized wave of retries.\n\nImpact:\nSustained 3x normal request volume against email-sender for twenty minutes after the real outage had already ended.\n\nRemediation:\nExponential backoff with jitter was added to every retry path calling email-sender, and a circuit breaker now trips after a threshold of consecutive failures.\n\nAction Items:\nStandardize the retry/backoff library across all outbound HTTP clients instead of each team implementing its own.",
+    "occurred_at": "2023-10-07T00:00:00Z",
+    "duration_minutes": 79,
+    "severity": "sev4",
+    "affected_service_names": [
+      "email-sender"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A brief upstream blip on email-sender triggered a retry storm that outlasted the original outage by twenty minutes.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "Every caller retried failed requests immediately with no backoff or jitter, so the moment the upstream recovered it was immediately re-saturated by a synchronized wave of retries.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Exponential backoff with jitter was added to every retry path calling email-sender, and a circuit breaker now trips after a threshold of consecutive failures.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Sustained 3x normal request volume against email-sender for twenty minutes after the real outage had already ended.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "scaling_load",
+    "scenario_key": "retry_storm"
+  },
+  {
+    "title": "checkout-cache: cache stampede (2)",
+    "raw_text": "Summary:\nA single popular cache entry behind checkout-cache expired and every waiting request stampeded the origin simultaneously.\n\nTimeline:\nInitial paging suggested a database outage, since query latency to the origin store spiked in step with the cache miss.\n\nRoot Cause:\nNo mechanism existed to serialize origin fetches for a single key on a cache miss, so a thundering herd of identical queries hit the origin at once instead of one query populating the cache for everyone else.\n\nImpact:\nOrigin query latency spiked enough to trip an unrelated downstream timeout, briefly widening the incident's blast radius.\n\nRemediation:\nA request-coalescing layer was added in front of the origin so concurrent misses for the same key share one fetch.\n\nAction Items:\nExtend request coalescing to the other two high-traffic cache namespaces that share this same risk.",
+    "occurred_at": "2025-03-02T00:00:00Z",
+    "duration_minutes": 142,
+    "severity": "sev3",
+    "affected_service_names": [
+      "checkout-cache"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A single popular cache entry behind checkout-cache expired and every waiting request stampeded the origin simultaneously.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "No mechanism existed to serialize origin fetches for a single key on a cache miss, so a thundering herd of identical queries hit the origin at once instead of one query populating the cache for everyone else.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "A request-coalescing layer was added in front of the origin so concurrent misses for the same key share one fetch.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Origin query latency spiked enough to trip an unrelated downstream timeout, briefly widening the incident's blast radius.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "scaling_load",
+    "scenario_key": "cache_stampede"
+  },
+  {
+    "title": "payment-gateway-adapter: quota exhaustion (2)",
+    "raw_text": "Summary:\nGrowing call volume to payment-gateway-adapter finally crossed an external quota limit nobody had been watching, and every call past that point failed outright.\n\nTimeline:\nRetries against the quota-exceeded error just kept failing identically, which at least ruled out a transient network issue quickly.\n\nRoot Cause:\nThe provider's quota was set based on usage projections from over a year earlier and had never been revisited as the integration's traffic grew.\n\nImpact:\nAll calls to payment-gateway-adapter failed for the remainder of the billing window.\n\nRemediation:\nNegotiated a higher quota with the provider and added proactive usage alerting well before the new limit.\n\nAction Items:\nEstablish a recurring quarterly review of usage against quota for every metered external dependency.",
+    "occurred_at": "2023-09-02T00:00:00Z",
+    "duration_minutes": 101,
+    "severity": "sev2",
+    "affected_service_names": [
+      "payment-gateway-adapter"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "Growing call volume to payment-gateway-adapter finally crossed an external quota limit nobody had been watching, and every call past that point failed outright.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The provider's quota was set based on usage projections from over a year earlier and had never been revisited as the integration's traffic grew.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Negotiated a higher quota with the provider and added proactive usage alerting well before the new limit.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "All calls to payment-gateway-adapter failed for the remainder of the billing window.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "quota_exhaustion"
+  },
+  {
+    "title": "payments-db: disk saturation",
+    "raw_text": "Summary:\npayments-db's disk filled up from unbounded log retention, and writes started failing once there was no space left.\n\nTimeline:\nThe first alert was a generic disk-space warning that was acknowledged but not acted on for several hours before writes actually started failing.\n\nRoot Cause:\nA log-rotation policy that was supposed to cap retention at 14 days had silently stopped running after a configuration change months earlier, and nobody noticed until the disk was completely full.\n\nImpact:\nWrite operations against payments-db failed for close to forty minutes while space was cleared.\n\nRemediation:\nRestored the log-rotation job, added a hard alert threshold at 85% disk usage instead of only at 95%, and moved older logs to cheaper cold storage automatically.\n\nAction Items:\nReview every other host's log-retention configuration for the same silent-failure risk.",
+    "occurred_at": "2023-07-26T00:00:00Z",
+    "duration_minutes": 99,
+    "severity": "sev1",
+    "affected_service_names": [
+      "payments-db"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "payments-db's disk filled up from unbounded log retention, and writes started failing once there was no space left.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A log-rotation policy that was supposed to cap retention at 14 days had silently stopped running after a configuration change months earlier, and nobody noticed until the disk was completely full.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Restored the log-rotation job, added a hard alert threshold at 85% disk usage instead of only at 95%, and moved older logs to cheaper cold storage automatically.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Write operations against payments-db failed for close to forty minutes while space was cleared.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "disk_saturation"
+  },
+  {
+    "title": "payments-svc: thread pool starvation",
+    "raw_text": "Summary:\nA slow downstream call on payments-svc held worker threads long enough that the thread pool starved and every other request queued behind it.\n\nTimeline:\nRequest latency climbed gradually rather than spiking, which delayed recognizing this as thread starvation rather than a simple traffic increase.\n\nRoot Cause:\nOne endpoint made a synchronous call to a slow downstream dependency with no timeout, so under load enough threads were parked waiting on that one call that the shared pool had nothing left for any other endpoint.\n\nImpact:\nLatency across every endpoint on payments-svc degraded, not just the one making the slow call, since they all shared the same thread pool.\n\nRemediation:\nAdded an explicit timeout on the slow downstream call and moved it to its own isolated thread pool so it can't starve unrelated endpoints.\n\nAction Items:\nAudit every synchronous downstream call on payments-svc for a missing timeout.",
+    "occurred_at": "2023-02-02T00:00:00Z",
+    "duration_minutes": 175,
+    "severity": "sev3",
+    "affected_service_names": [
+      "payments-svc"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A slow downstream call on payments-svc held worker threads long enough that the thread pool starved and every other request queued behind it.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "One endpoint made a synchronous call to a slow downstream dependency with no timeout, so under load enough threads were parked waiting on that one call that the shared pool had nothing left for any other endpoint.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Added an explicit timeout on the slow downstream call and moved it to its own isolated thread pool so it can't starve unrelated endpoints.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Latency across every endpoint on payments-svc degraded, not just the one making the slow call, since they all shared the same thread pool.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "thread_pool_starvation"
+  },
+  {
+    "title": "sms-gateway: cert expiry",
+    "raw_text": "Summary:\nAn expired TLS cert on sms-gateway broke every inbound connection the instant the clock passed midnight.\n\nTimeline:\nBecause the failure was so sudden and total, the team's first guess was a bad deploy that had gone out around the same time, which turned out to be unrelated.\n\nRoot Cause:\nThe certificate had a 90-day validity window and no automated renewal was ever wired up after the service was migrated to a new load balancer.\n\nImpact:\nA full outage of sms-gateway for all callers until the cert was manually replaced.\n\nRemediation:\nAutomated certificate renewal is now standard for every service behind this load balancer, not just newly provisioned ones.\n\nAction Items:\nAdd expiry monitoring across the whole certificate inventory, not just the ones known to be manually managed.",
+    "occurred_at": "2023-03-11T00:00:00Z",
+    "duration_minutes": 166,
+    "severity": "sev2",
+    "affected_service_names": [
+      "sms-gateway"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "An expired TLS cert on sms-gateway broke every inbound connection the instant the clock passed midnight.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The certificate had a 90-day validity window and no automated renewal was ever wired up after the service was migrated to a new load balancer.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Automated certificate renewal is now standard for every service behind this load balancer, not just newly provisioned ones.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "A full outage of sms-gateway for all callers until the cert was manually replaced.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "configuration_error",
+    "scenario_key": "cert_expiry"
+  },
+  {
+    "title": "ledger-service: dependency version drift",
+    "raw_text": "Summary:\nledger-service started behaving differently after a routine dependency upgrade quietly changed a default configuration value.\n\nTimeline:\nSymptoms were intermittent at first, which delayed connecting them to a dependency bump that had shipped two days earlier with no apparent issues at the time.\n\nRoot Cause:\nA transitive dependency's own minor version bump changed a connection-pooling default several layers removed from the direct dependency the team had actually reviewed.\n\nImpact:\nIntermittent elevated latency in ledger-service for two days before the actual cause was identified.\n\nRemediation:\nPinned the transitive dependency's version explicitly and added a diff review step covering transitive, not just direct, dependency changes.\n\nAction Items:\nAdd automated alerting on any transitive dependency version change, not only direct ones.",
+    "occurred_at": "2023-05-31T00:00:00Z",
+    "duration_minutes": 173,
+    "severity": "sev2",
+    "affected_service_names": [
+      "ledger-service"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "ledger-service started behaving differently after a routine dependency upgrade quietly changed a default configuration value.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A transitive dependency's own minor version bump changed a connection-pooling default several layers removed from the direct dependency the team had actually reviewed.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Pinned the transitive dependency's version explicitly and added a diff review step covering transitive, not just direct, dependency changes.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Intermittent elevated latency in ledger-service for two days before the actual cause was identified.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "dependency_failure",
+    "scenario_key": "dependency_version_drift"
+  },
+  {
+    "title": "elasticsearch-cluster: connection pool exhaustion",
+    "raw_text": "Summary:\nelasticsearch-cluster ran out of available client slots under load, and every service depending on it queued behind the same limited pool.\n\nTimeline:\nAn initial hypothesis blamed a network partition between availability zones; packet captures ruled that out within twenty minutes.\n\nRoot Cause:\nA recent capacity-planning review had not accounted for a new caller that opened long-lived connections instead of releasing them between requests, silently consuming a growing share of the fixed pool.\n\nImpact:\nDownstream callers saw their own request queues back up, and the incident briefly looked like a multi-service outage before the shared root cause was found.\n\nRemediation:\nThe offending caller was patched to release connections properly, and a hard cap on per-caller pool share was added as a backstop.\n\nAction Items:\nAudit every other high-traffic caller for the same connection-lifecycle bug. Document the pool-sizing formula.",
+    "occurred_at": "2024-03-07T00:00:00Z",
+    "duration_minutes": 123,
+    "severity": "sev2",
+    "affected_service_names": [
+      "elasticsearch-cluster"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "elasticsearch-cluster ran out of available client slots under load, and every service depending on it queued behind the same limited pool.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A recent capacity-planning review had not accounted for a new caller that opened long-lived connections instead of releasing them between requests, silently consuming a growing share of the fixed pool.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "The offending caller was patched to release connections properly, and a hard cap on per-caller pool share was added as a backstop.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Downstream callers saw their own request queues back up, and the incident briefly looked like a multi-service outage before the shared root cause was found.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "connection_pool_exhaustion"
+  },
+  {
+    "title": "payments-db: disk saturation (2)",
+    "raw_text": "Summary:\nDisk usage on payments-db crept up for weeks until it finally hit 100% and every write started erroring.\n\nTimeline:\nCapacity dashboards had shown a slow upward trend for weeks, but the trend line wasn't alerting on and nobody was watching it closely enough to catch it before it topped out.\n\nRoot Cause:\nAn old debug-logging flag had been left enabled in production, generating far more log volume than the retention policy was designed to handle.\n\nImpact:\npayments-db rejected writes for roughly forty minutes.\n\nRemediation:\nDisabled the debug-logging flag, freed space immediately, and added a trend-based alert that fires well before disk usage reaches capacity rather than only at a fixed threshold.\n\nAction Items:\nAudit production configuration for any other debug flags left on from an earlier investigation.",
+    "occurred_at": "2025-01-13T00:00:00Z",
+    "duration_minutes": 169,
+    "severity": "sev1",
+    "affected_service_names": [
+      "payments-db"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "Disk usage on payments-db crept up for weeks until it finally hit 100% and every write started erroring.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "An old debug-logging flag had been left enabled in production, generating far more log volume than the retention policy was designed to handle.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Disabled the debug-logging flag, freed space immediately, and added a trend-based alert that fires well before disk usage reaches capacity rather than only at a fixed threshold.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "payments-db rejected writes for roughly forty minutes.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "disk_saturation"
+  },
+  {
+    "title": "catalog-api: config rollout",
+    "raw_text": "Summary:\nA configuration rollout to catalog-api shipped a typo'd feature-flag value that disabled a required code path for every request.\n\nTimeline:\nBecause the deploy itself looked healthy in the pipeline, the team spent the first ten minutes ruling out a code regression before checking the configuration change.\n\nRoot Cause:\nThe config change was pushed directly through the admin panel rather than through the reviewed pipeline, so the typo skipped both code review and the pipeline's own validation step.\n\nImpact:\nEvery request to catalog-api hit the disabled code path and returned an error for the duration of the incident.\n\nRemediation:\nConfig changes now go through the same reviewed pipeline as code, with a validation step that rejects unknown flag values instead of silently accepting them.\n\nAction Items:\nClose the admin-panel direct-edit path entirely, or at minimum require the same review as a code change.",
+    "occurred_at": "2023-06-21T00:00:00Z",
+    "duration_minutes": 70,
+    "severity": "sev2",
+    "affected_service_names": [
+      "catalog-api"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A configuration rollout to catalog-api shipped a typo'd feature-flag value that disabled a required code path for every request.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The config change was pushed directly through the admin panel rather than through the reviewed pipeline, so the typo skipped both code review and the pipeline's own validation step.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Config changes now go through the same reviewed pipeline as code, with a validation step that rejects unknown flag values instead of silently accepting them.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Every request to catalog-api hit the disabled code path and returned an error for the duration of the incident.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "configuration_error",
+    "scenario_key": "config_rollout"
+  },
+  {
+    "title": "elasticsearch-cluster: disk saturation",
+    "raw_text": "Summary:\nDisk usage on elasticsearch-cluster crept up for weeks until it finally hit 100% and every write started erroring.\n\nTimeline:\nCapacity dashboards had shown a slow upward trend for weeks, but the trend line wasn't alerting on and nobody was watching it closely enough to catch it before it topped out.\n\nRoot Cause:\nAn old debug-logging flag had been left enabled in production, generating far more log volume than the retention policy was designed to handle.\n\nImpact:\nelasticsearch-cluster rejected writes for roughly forty minutes.\n\nRemediation:\nDisabled the debug-logging flag, freed space immediately, and added a trend-based alert that fires well before disk usage reaches capacity rather than only at a fixed threshold.\n\nAction Items:\nAudit production configuration for any other debug flags left on from an earlier investigation.",
+    "occurred_at": "2023-07-30T00:00:00Z",
+    "duration_minutes": 64,
+    "severity": "sev3",
+    "affected_service_names": [
+      "elasticsearch-cluster"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "Disk usage on elasticsearch-cluster crept up for weeks until it finally hit 100% and every write started erroring.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "An old debug-logging flag had been left enabled in production, generating far more log volume than the retention policy was designed to handle.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Disabled the debug-logging flag, freed space immediately, and added a trend-based alert that fires well before disk usage reaches capacity rather than only at a fixed threshold.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "elasticsearch-cluster rejected writes for roughly forty minutes.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "disk_saturation"
+  },
+  {
+    "title": "sso-gateway: cert expiry",
+    "raw_text": "Summary:\nAn expired TLS cert on sso-gateway broke every inbound connection the instant the clock passed midnight.\n\nTimeline:\nBecause the failure was so sudden and total, the team's first guess was a bad deploy that had gone out around the same time, which turned out to be unrelated.\n\nRoot Cause:\nThe certificate had a 90-day validity window and no automated renewal was ever wired up after the service was migrated to a new load balancer.\n\nImpact:\nA full outage of sso-gateway for all callers until the cert was manually replaced.\n\nRemediation:\nAutomated certificate renewal is now standard for every service behind this load balancer, not just newly provisioned ones.\n\nAction Items:\nAdd expiry monitoring across the whole certificate inventory, not just the ones known to be manually managed.",
+    "occurred_at": "2023-01-04T00:00:00Z",
+    "duration_minutes": 121,
+    "severity": "sev2",
+    "affected_service_names": [
+      "sso-gateway"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "An expired TLS cert on sso-gateway broke every inbound connection the instant the clock passed midnight.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The certificate had a 90-day validity window and no automated renewal was ever wired up after the service was migrated to a new load balancer.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Automated certificate renewal is now standard for every service behind this load balancer, not just newly provisioned ones.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "A full outage of sso-gateway for all callers until the cert was manually replaced.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "configuration_error",
+    "scenario_key": "cert_expiry"
+  },
+  {
+    "title": "identity-db: disk saturation (2)",
+    "raw_text": "Summary:\nidentity-db's disk filled up from unbounded log retention, and writes started failing once there was no space left.\n\nTimeline:\nThe first alert was a generic disk-space warning that was acknowledged but not acted on for several hours before writes actually started failing.\n\nRoot Cause:\nA log-rotation policy that was supposed to cap retention at 14 days had silently stopped running after a configuration change months earlier, and nobody noticed until the disk was completely full.\n\nImpact:\nWrite operations against identity-db failed for close to forty minutes while space was cleared.\n\nRemediation:\nRestored the log-rotation job, added a hard alert threshold at 85% disk usage instead of only at 95%, and moved older logs to cheaper cold storage automatically.\n\nAction Items:\nReview every other host's log-retention configuration for the same silent-failure risk.",
+    "occurred_at": "2025-07-29T00:00:00Z",
+    "duration_minutes": 22,
+    "severity": "sev3",
+    "affected_service_names": [
+      "identity-db"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "identity-db's disk filled up from unbounded log retention, and writes started failing once there was no space left.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A log-rotation policy that was supposed to cap retention at 14 days had silently stopped running after a configuration change months earlier, and nobody noticed until the disk was completely full.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Restored the log-rotation job, added a hard alert threshold at 85% disk usage instead of only at 95%, and moved older logs to cheaper cold storage automatically.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Write operations against identity-db failed for close to forty minutes while space was cleared.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "disk_saturation"
+  },
+  {
+    "title": "notification-queue: poison message",
+    "raw_text": "Summary:\nOne bad event on notification-queue kept getting redelivered and taking down whichever consumer instance picked it up next.\n\nTimeline:\nMetrics showed consumer lag growing steadily, which initially looked like a simple capacity problem rather than a single message repeatedly crashing every worker.\n\nRoot Cause:\nThe consumer had no per-message retry limit, so a message that always fails to deserialize was retried forever, each attempt crashing the worker that picked it up.\n\nImpact:\nQueue lag grew for the better part of an hour before the actual cause -- one message, not a capacity shortfall -- was identified.\n\nRemediation:\nA maximum redelivery count now routes a repeatedly-failing message to a dead-letter queue for manual inspection instead of endless retry.\n\nAction Items:\nBuild a small dashboard for dead-letter queue depth so a growing pile of poison messages is visible before it causes an incident.",
+    "occurred_at": "2024-07-25T00:00:00Z",
+    "duration_minutes": 53,
+    "severity": "sev3",
+    "affected_service_names": [
+      "notification-queue"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "One bad event on notification-queue kept getting redelivered and taking down whichever consumer instance picked it up next.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The consumer had no per-message retry limit, so a message that always fails to deserialize was retried forever, each attempt crashing the worker that picked it up.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "A maximum redelivery count now routes a repeatedly-failing message to a dead-letter queue for manual inspection instead of endless retry.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Queue lag grew for the better part of an hour before the actual cause -- one message, not a capacity shortfall -- was identified.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "code_defect",
+    "scenario_key": "poison_message"
+  },
+  {
+    "title": "cdn-edge: clock skew",
+    "raw_text": "Summary:\nAn NTP sync failure let cdn-edge's clock drift far enough that time-based auth tokens started being rejected as expired the moment they were issued.\n\nTimeline:\nThe first theory was a bug in the token-issuing code itself, since the tokens looked correctly formed -- just always expired.\n\nRoot Cause:\nThe NTP daemon on the affected host had silently stopped syncing three days earlier, and the host's clock had drifted almost four minutes ahead of real time by the time tokens started failing validation.\n\nImpact:\nEvery token issued from the affected host was rejected downstream as already expired.\n\nRemediation:\nRestarted NTP sync and added host-level clock-drift alerting instead of relying on NTP daemon health alone.\n\nAction Items:\nAudit every host's NTP daemon status rather than assuming it's running because it was configured to be.",
+    "occurred_at": "2024-01-13T00:00:00Z",
+    "duration_minutes": 68,
+    "severity": "sev3",
+    "affected_service_names": [
+      "cdn-edge"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "An NTP sync failure let cdn-edge's clock drift far enough that time-based auth tokens started being rejected as expired the moment they were issued.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The NTP daemon on the affected host had silently stopped syncing three days earlier, and the host's clock had drifted almost four minutes ahead of real time by the time tokens started failing validation.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Restarted NTP sync and added host-level clock-drift alerting instead of relying on NTP daemon health alone.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Every token issued from the affected host was rejected downstream as already expired.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "infrastructure_hardware",
+    "scenario_key": "clock_skew"
+  },
+  {
+    "title": "redis-cache: cache stampede (2)",
+    "raw_text": "Summary:\nredis-cache evicted a hot key at the same moment thousands of requests needed it, and every one of them fell through to the origin at once.\n\nTimeline:\nThe team initially suspected the cache cluster itself had crashed, since request latency to it spiked at the same time.\n\nRoot Cause:\nThe hot key's TTL expired with no jitter, so every instance's local view of the cache went stale in the same millisecond, and none of them coordinated on who should repopulate it.\n\nImpact:\nThe origin datastore behind redis-cache saw a 40x spike in read load for about ninety seconds.\n\nRemediation:\nAdded TTL jitter so keys don't all expire together, and a single-flight lock so only one request repopulates a given key while the rest wait on that result instead of all hitting the origin.\n\nAction Items:\nIdentify other high-traffic cache keys with the same synchronized-TTL risk and apply the same jitter fix proactively.",
+    "occurred_at": "2024-07-22T00:00:00Z",
+    "duration_minutes": 163,
+    "severity": "sev1",
+    "affected_service_names": [
+      "redis-cache"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "redis-cache evicted a hot key at the same moment thousands of requests needed it, and every one of them fell through to the origin at once.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The hot key's TTL expired with no jitter, so every instance's local view of the cache went stale in the same millisecond, and none of them coordinated on who should repopulate it.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Added TTL jitter so keys don't all expire together, and a single-flight lock so only one request repopulates a given key while the rest wait on that result instead of all hitting the origin.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "The origin datastore behind redis-cache saw a 40x spike in read load for about ninety seconds.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "scaling_load",
+    "scenario_key": "cache_stampede"
+  },
+  {
+    "title": "redis-cache: cache stampede",
+    "raw_text": "Summary:\nA single popular cache entry behind redis-cache expired and every waiting request stampeded the origin simultaneously.\n\nTimeline:\nInitial paging suggested a database outage, since query latency to the origin store spiked in step with the cache miss.\n\nRoot Cause:\nNo mechanism existed to serialize origin fetches for a single key on a cache miss, so a thundering herd of identical queries hit the origin at once instead of one query populating the cache for everyone else.\n\nImpact:\nOrigin query latency spiked enough to trip an unrelated downstream timeout, briefly widening the incident's blast radius.\n\nRemediation:\nA request-coalescing layer was added in front of the origin so concurrent misses for the same key share one fetch.\n\nAction Items:\nExtend request coalescing to the other two high-traffic cache namespaces that share this same risk.",
+    "occurred_at": "2025-04-22T00:00:00Z",
+    "duration_minutes": 15,
+    "severity": "sev4",
+    "affected_service_names": [
+      "redis-cache"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A single popular cache entry behind redis-cache expired and every waiting request stampeded the origin simultaneously.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "No mechanism existed to serialize origin fetches for a single key on a cache miss, so a thundering herd of identical queries hit the origin at once instead of one query populating the cache for everyone else.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "A request-coalescing layer was added in front of the origin so concurrent misses for the same key share one fetch.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Origin query latency spiked enough to trip an unrelated downstream timeout, briefly widening the incident's blast radius.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "scaling_load",
+    "scenario_key": "cache_stampede"
+  },
+  {
+    "title": "payment-gateway-adapter: quota exhaustion",
+    "raw_text": "Summary:\npayment-gateway-adapter hit its external provider's rate quota mid-day and every call past that point was rejected until the quota reset.\n\nTimeline:\nThe team initially assumed the provider itself was having an outage, since the error responses didn't clearly indicate a quota rejection.\n\nRoot Cause:\nUsage had grown steadily over the past month, but nobody was tracking usage against the fixed quota, so the threshold was crossed with no warning.\n\nImpact:\nEvery call to payment-gateway-adapter past the quota limit failed for the rest of the billing period until the quota reset at midnight.\n\nRemediation:\nRequested a quota increase from the provider and added usage-tracking alerting at 80% of the current limit.\n\nAction Items:\nSet up the same usage-tracking alert for every other external provider with a fixed quota.",
+    "occurred_at": "2024-07-10T00:00:00Z",
+    "duration_minutes": 118,
+    "severity": "sev3",
+    "affected_service_names": [
+      "payment-gateway-adapter"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "payment-gateway-adapter hit its external provider's rate quota mid-day and every call past that point was rejected until the quota reset.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "Usage had grown steadily over the past month, but nobody was tracking usage against the fixed quota, so the threshold was crossed with no warning.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Requested a quota increase from the provider and added usage-tracking alerting at 80% of the current limit.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Every call to payment-gateway-adapter past the quota limit failed for the rest of the billing period until the quota reset at midnight.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "quota_exhaustion"
+  },
+  {
+    "title": "fraud-detection: thread pool starvation",
+    "raw_text": "Summary:\nA slow downstream call on fraud-detection held worker threads long enough that the thread pool starved and every other request queued behind it.\n\nTimeline:\nRequest latency climbed gradually rather than spiking, which delayed recognizing this as thread starvation rather than a simple traffic increase.\n\nRoot Cause:\nOne endpoint made a synchronous call to a slow downstream dependency with no timeout, so under load enough threads were parked waiting on that one call that the shared pool had nothing left for any other endpoint.\n\nImpact:\nLatency across every endpoint on fraud-detection degraded, not just the one making the slow call, since they all shared the same thread pool.\n\nRemediation:\nAdded an explicit timeout on the slow downstream call and moved it to its own isolated thread pool so it can't starve unrelated endpoints.\n\nAction Items:\nAudit every synchronous downstream call on fraud-detection for a missing timeout.",
+    "occurred_at": "2024-07-03T00:00:00Z",
+    "duration_minutes": 96,
+    "severity": "sev3",
+    "affected_service_names": [
+      "fraud-detection"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A slow downstream call on fraud-detection held worker threads long enough that the thread pool starved and every other request queued behind it.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "One endpoint made a synchronous call to a slow downstream dependency with no timeout, so under load enough threads were parked waiting on that one call that the shared pool had nothing left for any other endpoint.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Added an explicit timeout on the slow downstream call and moved it to its own isolated thread pool so it can't starve unrelated endpoints.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Latency across every endpoint on fraud-detection degraded, not just the one making the slow call, since they all shared the same thread pool.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "thread_pool_starvation"
+  },
+  {
+    "title": "message-bus: poison message (2)",
+    "raw_text": "Summary:\nA single malformed message on message-bus was repeatedly redelivered and crashed every consumer that tried to process it.\n\nTimeline:\nThe on-call engineer initially restarted the consumer fleet, which briefly appeared to help before the same crash recurred within a minute.\n\nRoot Cause:\nA message with an unexpected null field bypassed input validation at the producer, and the consumer's deserializer threw an unhandled exception on every delivery attempt instead of moving the message aside.\n\nImpact:\nThe consumer fleet crash-looped for close to an hour, backing up the rest of the queue behind the one bad message.\n\nRemediation:\nAdded a dead-letter queue so a message that fails processing a fixed number of times is moved aside instead of blocking the whole queue, plus stricter producer-side validation.\n\nAction Items:\nAdd a schema-validation gate at the producer for every topic that doesn't already have one.",
+    "occurred_at": "2025-07-05T00:00:00Z",
+    "duration_minutes": 145,
+    "severity": "sev2",
+    "affected_service_names": [
+      "message-bus"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A single malformed message on message-bus was repeatedly redelivered and crashed every consumer that tried to process it.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A message with an unexpected null field bypassed input validation at the producer, and the consumer's deserializer threw an unhandled exception on every delivery attempt instead of moving the message aside.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Added a dead-letter queue so a message that fails processing a fixed number of times is moved aside instead of blocking the whole queue, plus stricter producer-side validation.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "The consumer fleet crash-looped for close to an hour, backing up the rest of the queue behind the one bad message.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "code_defect",
+    "scenario_key": "poison_message"
+  },
+  {
+    "title": "search-api: config rollout",
+    "raw_text": "Summary:\nAn unreviewed config push to search-api flipped a flag to an invalid value and broke a required request path instantly.\n\nTimeline:\nThe rollout itself wasn't flagged as risky by anyone since it was 'just a config change,' which is exactly why it skipped the scrutiny a code change would have gotten.\n\nRoot Cause:\nNo schema validation existed for this particular flag's allowed values, so a typo produced a value the code silently treated as 'disabled' instead of raising an error.\n\nImpact:\nA full outage of the affected request path in search-api until the config was rolled back.\n\nRemediation:\nAdded schema validation for every feature-flag value and required config changes to go through the same review gate as code.\n\nAction Items:\nRetroactively add schema validation to every existing flag, not just newly created ones.",
+    "occurred_at": "2024-03-17T00:00:00Z",
+    "duration_minutes": 36,
+    "severity": "sev2",
+    "affected_service_names": [
+      "search-api"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "An unreviewed config push to search-api flipped a flag to an invalid value and broke a required request path instantly.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "No schema validation existed for this particular flag's allowed values, so a typo produced a value the code silently treated as 'disabled' instead of raising an error.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Added schema validation for every feature-flag value and required config changes to go through the same review gate as code.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "A full outage of the affected request path in search-api until the config was rolled back.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "configuration_error",
+    "scenario_key": "config_rollout"
+  },
+  {
+    "title": "session-service: thread pool starvation",
+    "raw_text": "Summary:\nsession-service's shared worker pool was starved by one endpoint's unbounded downstream call, degrading every other endpoint that shared the same pool.\n\nTimeline:\nOn-call initially scaled up the instance count, which helped only briefly before the larger pool starved the same way under continued load.\n\nRoot Cause:\nThe pool-starving endpoint had no circuit breaker and no timeout, so each slow downstream call held its thread for the full length of the downstream's own hang.\n\nImpact:\nEvery endpoint sharing the pool saw degraded latency, widening what looked at first like an isolated problem into a service-wide one.\n\nRemediation:\nIsolated the offending endpoint into its own bounded thread pool with a hard timeout, so it can now only ever starve itself.\n\nAction Items:\nApply the same per-endpoint pool isolation to every other endpoint making a downstream call with no timeout.",
+    "occurred_at": "2024-04-09T00:00:00Z",
+    "duration_minutes": 50,
+    "severity": "sev3",
+    "affected_service_names": [
+      "session-service"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "session-service's shared worker pool was starved by one endpoint's unbounded downstream call, degrading every other endpoint that shared the same pool.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The pool-starving endpoint had no circuit breaker and no timeout, so each slow downstream call held its thread for the full length of the downstream's own hang.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Isolated the offending endpoint into its own bounded thread pool with a hard timeout, so it can now only ever starve itself.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Every endpoint sharing the pool saw degraded latency, widening what looked at first like an isolated problem into a service-wide one.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "thread_pool_starvation"
+  },
+  {
+    "title": "api-gateway: config rollout",
+    "raw_text": "Summary:\nA configuration rollout to api-gateway shipped a typo'd feature-flag value that disabled a required code path for every request.\n\nTimeline:\nBecause the deploy itself looked healthy in the pipeline, the team spent the first ten minutes ruling out a code regression before checking the configuration change.\n\nRoot Cause:\nThe config change was pushed directly through the admin panel rather than through the reviewed pipeline, so the typo skipped both code review and the pipeline's own validation step.\n\nImpact:\nEvery request to api-gateway hit the disabled code path and returned an error for the duration of the incident.\n\nRemediation:\nConfig changes now go through the same reviewed pipeline as code, with a validation step that rejects unknown flag values instead of silently accepting them.\n\nAction Items:\nClose the admin-panel direct-edit path entirely, or at minimum require the same review as a code change.",
+    "occurred_at": "2023-07-16T00:00:00Z",
+    "duration_minutes": 179,
+    "severity": "sev3",
+    "affected_service_names": [
+      "api-gateway"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A configuration rollout to api-gateway shipped a typo'd feature-flag value that disabled a required code path for every request.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The config change was pushed directly through the admin panel rather than through the reviewed pipeline, so the typo skipped both code review and the pipeline's own validation step.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Config changes now go through the same reviewed pipeline as code, with a validation step that rejects unknown flag values instead of silently accepting them.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Every request to api-gateway hit the disabled code path and returned an error for the duration of the incident.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "configuration_error",
+    "scenario_key": "config_rollout"
+  },
+  {
+    "title": "identity-db: disk saturation",
+    "raw_text": "Summary:\nDisk usage on identity-db crept up for weeks until it finally hit 100% and every write started erroring.\n\nTimeline:\nCapacity dashboards had shown a slow upward trend for weeks, but the trend line wasn't alerting on and nobody was watching it closely enough to catch it before it topped out.\n\nRoot Cause:\nAn old debug-logging flag had been left enabled in production, generating far more log volume than the retention policy was designed to handle.\n\nImpact:\nidentity-db rejected writes for roughly forty minutes.\n\nRemediation:\nDisabled the debug-logging flag, freed space immediately, and added a trend-based alert that fires well before disk usage reaches capacity rather than only at a fixed threshold.\n\nAction Items:\nAudit production configuration for any other debug flags left on from an earlier investigation.",
+    "occurred_at": "2024-06-02T00:00:00Z",
+    "duration_minutes": 172,
+    "severity": "sev3",
+    "affected_service_names": [
+      "identity-db"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "Disk usage on identity-db crept up for weeks until it finally hit 100% and every write started erroring.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "An old debug-logging flag had been left enabled in production, generating far more log volume than the retention policy was designed to handle.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Disabled the debug-logging flag, freed space immediately, and added a trend-based alert that fires well before disk usage reaches capacity rather than only at a fixed threshold.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "identity-db rejected writes for roughly forty minutes.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "disk_saturation"
+  },
+  {
+    "title": "push-notification-svc: retry storm",
+    "raw_text": "Summary:\nA brief upstream blip on push-notification-svc triggered a retry storm that outlasted the original outage by twenty minutes.\n\nTimeline:\nOn-call first assumed the upstream provider was still down, but the provider's own status page had already recovered five minutes earlier.\n\nRoot Cause:\nEvery caller retried failed requests immediately with no backoff or jitter, so the moment the upstream recovered it was immediately re-saturated by a synchronized wave of retries.\n\nImpact:\nSustained 3x normal request volume against push-notification-svc for twenty minutes after the real outage had already ended.\n\nRemediation:\nExponential backoff with jitter was added to every retry path calling push-notification-svc, and a circuit breaker now trips after a threshold of consecutive failures.\n\nAction Items:\nStandardize the retry/backoff library across all outbound HTTP clients instead of each team implementing its own.",
+    "occurred_at": "2024-02-25T00:00:00Z",
+    "duration_minutes": 15,
+    "severity": "sev2",
+    "affected_service_names": [
+      "push-notification-svc"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A brief upstream blip on push-notification-svc triggered a retry storm that outlasted the original outage by twenty minutes.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "Every caller retried failed requests immediately with no backoff or jitter, so the moment the upstream recovered it was immediately re-saturated by a synchronized wave of retries.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Exponential backoff with jitter was added to every retry path calling push-notification-svc, and a circuit breaker now trips after a threshold of consecutive failures.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Sustained 3x normal request volume against push-notification-svc for twenty minutes after the real outage had already ended.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "scaling_load",
+    "scenario_key": "retry_storm"
+  },
+  {
+    "title": "notification-queue: poison message (3)",
+    "raw_text": "Summary:\nOne bad event on notification-queue kept getting redelivered and taking down whichever consumer instance picked it up next.\n\nTimeline:\nMetrics showed consumer lag growing steadily, which initially looked like a simple capacity problem rather than a single message repeatedly crashing every worker.\n\nRoot Cause:\nThe consumer had no per-message retry limit, so a message that always fails to deserialize was retried forever, each attempt crashing the worker that picked it up.\n\nImpact:\nQueue lag grew for the better part of an hour before the actual cause -- one message, not a capacity shortfall -- was identified.\n\nRemediation:\nA maximum redelivery count now routes a repeatedly-failing message to a dead-letter queue for manual inspection instead of endless retry.\n\nAction Items:\nBuild a small dashboard for dead-letter queue depth so a growing pile of poison messages is visible before it causes an incident.",
+    "occurred_at": "2025-04-29T00:00:00Z",
+    "duration_minutes": 125,
+    "severity": "sev3",
+    "affected_service_names": [
+      "notification-queue"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "One bad event on notification-queue kept getting redelivered and taking down whichever consumer instance picked it up next.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The consumer had no per-message retry limit, so a message that always fails to deserialize was retried forever, each attempt crashing the worker that picked it up.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "A maximum redelivery count now routes a repeatedly-failing message to a dead-letter queue for manual inspection instead of endless retry.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Queue lag grew for the better part of an hour before the actual cause -- one message, not a capacity shortfall -- was identified.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "code_defect",
+    "scenario_key": "poison_message"
+  },
+  {
+    "title": "catalog-db: connection pool exhaustion",
+    "raw_text": "Summary:\ncatalog-db exhausted its outbound connection pool during a traffic spike, causing a five-minute window of elevated latency and request timeouts.\n\nTimeline:\nAt first the on-call engineer suspected a bad deploy from earlier that day and rolled it back, which did not help.\n\nRoot Cause:\nThe connection pool size was left at its default of 10, far below what the service's actual concurrent request volume required once traffic exceeded the previous quarter's peak.\n\nImpact:\nRoughly 8% of requests during the window returned a 503 or timed out client-side.\n\nRemediation:\nThe pool size was raised to 50 and a queueing timeout was added so exhaustion degrades gracefully instead of hanging connections indefinitely.\n\nAction Items:\nAdd pool-utilization alerting. Load-test the new pool size before the next seasonal traffic peak.\n\nDetection:\nNo alert fired on pool utilization itself -- only downstream request-latency alerts caught this, several minutes after the pool was already saturated.",
+    "occurred_at": "2024-10-25T00:00:00Z",
+    "duration_minutes": 12,
+    "severity": "sev3",
+    "affected_service_names": [
+      "catalog-db"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "catalog-db exhausted its outbound connection pool during a traffic spike, causing a five-minute window of elevated latency and request timeouts.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The connection pool size was left at its default of 10, far below what the service's actual concurrent request volume required once traffic exceeded the previous quarter's peak.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "The pool size was raised to 50 and a queueing timeout was added so exhaustion degrades gracefully instead of hanging connections indefinitely.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Roughly 8% of requests during the window returned a 503 or timed out client-side.",
+        "section_label": "Impact"
+      },
+      {
+        "fact_type": "detection_gap",
+        "statement": "No alert fired on pool utilization itself -- only downstream request-latency alerts caught this, several minutes after the pool was already saturated.",
+        "section_label": "Detection"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "connection_pool_exhaustion"
+  },
+  {
+    "title": "sso-gateway: cert expiry (2)",
+    "raw_text": "Summary:\nThe TLS certificate for sso-gateway expired at midnight, and every caller started failing the handshake within seconds.\n\nTimeline:\nThe first reports were mistaken for a DNS problem, since callers just saw connection failures with no useful error detail at first glance.\n\nRoot Cause:\nCertificate renewal was a manual process the team had meant to automate the previous quarter but never got to, and nobody was tracking the expiry date on a calendar either.\n\nImpact:\nEvery caller of sso-gateway failed outright for eighteen minutes until a new certificate was issued and deployed.\n\nRemediation:\nCertificate renewal was automated end-to-end, and a 45-day-before-expiry alert was added as a backstop even for automated certificates.\n\nAction Items:\nAudit every other service for a manually-managed certificate with no expiry alerting.",
+    "occurred_at": "2024-02-02T00:00:00Z",
+    "duration_minutes": 167,
+    "severity": "sev3",
+    "affected_service_names": [
+      "sso-gateway"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "The TLS certificate for sso-gateway expired at midnight, and every caller started failing the handshake within seconds.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "Certificate renewal was a manual process the team had meant to automate the previous quarter but never got to, and nobody was tracking the expiry date on a calendar either.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Certificate renewal was automated end-to-end, and a 45-day-before-expiry alert was added as a backstop even for automated certificates.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Every caller of sso-gateway failed outright for eighteen minutes until a new certificate was issued and deployed.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "configuration_error",
+    "scenario_key": "cert_expiry"
+  },
+  {
+    "title": "push-notification-svc: cert expiry",
+    "raw_text": "Summary:\nThe TLS certificate for push-notification-svc expired at midnight, and every caller started failing the handshake within seconds.\n\nTimeline:\nThe first reports were mistaken for a DNS problem, since callers just saw connection failures with no useful error detail at first glance.\n\nRoot Cause:\nCertificate renewal was a manual process the team had meant to automate the previous quarter but never got to, and nobody was tracking the expiry date on a calendar either.\n\nImpact:\nEvery caller of push-notification-svc failed outright for eighteen minutes until a new certificate was issued and deployed.\n\nRemediation:\nCertificate renewal was automated end-to-end, and a 45-day-before-expiry alert was added as a backstop even for automated certificates.\n\nAction Items:\nAudit every other service for a manually-managed certificate with no expiry alerting.",
+    "occurred_at": "2025-01-13T00:00:00Z",
+    "duration_minutes": 70,
+    "severity": "sev4",
+    "affected_service_names": [
+      "push-notification-svc"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "The TLS certificate for push-notification-svc expired at midnight, and every caller started failing the handshake within seconds.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "Certificate renewal was a manual process the team had meant to automate the previous quarter but never got to, and nobody was tracking the expiry date on a calendar either.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Certificate renewal was automated end-to-end, and a 45-day-before-expiry alert was added as a backstop even for automated certificates.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Every caller of push-notification-svc failed outright for eighteen minutes until a new certificate was issued and deployed.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "configuration_error",
+    "scenario_key": "cert_expiry"
+  },
+  {
+    "title": "postgres-primary: disk saturation",
+    "raw_text": "Summary:\npostgres-primary's disk filled up from unbounded log retention, and writes started failing once there was no space left.\n\nTimeline:\nThe first alert was a generic disk-space warning that was acknowledged but not acted on for several hours before writes actually started failing.\n\nRoot Cause:\nA log-rotation policy that was supposed to cap retention at 14 days had silently stopped running after a configuration change months earlier, and nobody noticed until the disk was completely full.\n\nImpact:\nWrite operations against postgres-primary failed for close to forty minutes while space was cleared.\n\nRemediation:\nRestored the log-rotation job, added a hard alert threshold at 85% disk usage instead of only at 95%, and moved older logs to cheaper cold storage automatically.\n\nAction Items:\nReview every other host's log-retention configuration for the same silent-failure risk.",
+    "occurred_at": "2023-07-12T00:00:00Z",
+    "duration_minutes": 75,
+    "severity": "sev4",
+    "affected_service_names": [
+      "postgres-primary"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "postgres-primary's disk filled up from unbounded log retention, and writes started failing once there was no space left.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A log-rotation policy that was supposed to cap retention at 14 days had silently stopped running after a configuration change months earlier, and nobody noticed until the disk was completely full.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Restored the log-rotation job, added a hard alert threshold at 85% disk usage instead of only at 95%, and moved older logs to cheaper cold storage automatically.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Write operations against postgres-primary failed for close to forty minutes while space was cleared.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "disk_saturation"
+  },
+  {
+    "title": "message-bus: poison message (3)",
+    "raw_text": "Summary:\nA single malformed message on message-bus was repeatedly redelivered and crashed every consumer that tried to process it.\n\nTimeline:\nThe on-call engineer initially restarted the consumer fleet, which briefly appeared to help before the same crash recurred within a minute.\n\nRoot Cause:\nA message with an unexpected null field bypassed input validation at the producer, and the consumer's deserializer threw an unhandled exception on every delivery attempt instead of moving the message aside.\n\nImpact:\nThe consumer fleet crash-looped for close to an hour, backing up the rest of the queue behind the one bad message.\n\nRemediation:\nAdded a dead-letter queue so a message that fails processing a fixed number of times is moved aside instead of blocking the whole queue, plus stricter producer-side validation.\n\nAction Items:\nAdd a schema-validation gate at the producer for every topic that doesn't already have one.",
+    "occurred_at": "2025-04-17T00:00:00Z",
+    "duration_minutes": 156,
+    "severity": "sev2",
+    "affected_service_names": [
+      "message-bus"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A single malformed message on message-bus was repeatedly redelivered and crashed every consumer that tried to process it.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A message with an unexpected null field bypassed input validation at the producer, and the consumer's deserializer threw an unhandled exception on every delivery attempt instead of moving the message aside.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Added a dead-letter queue so a message that fails processing a fixed number of times is moved aside instead of blocking the whole queue, plus stricter producer-side validation.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "The consumer fleet crash-looped for close to an hour, backing up the rest of the queue behind the one bad message.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "code_defect",
+    "scenario_key": "poison_message"
+  },
+  {
+    "title": "session-service: dependency version drift",
+    "raw_text": "Summary:\nsession-service started behaving differently after a routine dependency upgrade quietly changed a default configuration value.\n\nTimeline:\nSymptoms were intermittent at first, which delayed connecting them to a dependency bump that had shipped two days earlier with no apparent issues at the time.\n\nRoot Cause:\nA transitive dependency's own minor version bump changed a connection-pooling default several layers removed from the direct dependency the team had actually reviewed.\n\nImpact:\nIntermittent elevated latency in session-service for two days before the actual cause was identified.\n\nRemediation:\nPinned the transitive dependency's version explicitly and added a diff review step covering transitive, not just direct, dependency changes.\n\nAction Items:\nAdd automated alerting on any transitive dependency version change, not only direct ones.",
+    "occurred_at": "2023-04-04T00:00:00Z",
+    "duration_minutes": 12,
+    "severity": "sev1",
+    "affected_service_names": [
+      "session-service"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "session-service started behaving differently after a routine dependency upgrade quietly changed a default configuration value.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A transitive dependency's own minor version bump changed a connection-pooling default several layers removed from the direct dependency the team had actually reviewed.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Pinned the transitive dependency's version explicitly and added a diff review step covering transitive, not just direct, dependency changes.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Intermittent elevated latency in session-service for two days before the actual cause was identified.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "dependency_failure",
+    "scenario_key": "dependency_version_drift"
+  },
+  {
+    "title": "search-cache: cache stampede (2)",
+    "raw_text": "Summary:\nA single popular cache entry behind search-cache expired and every waiting request stampeded the origin simultaneously.\n\nTimeline:\nInitial paging suggested a database outage, since query latency to the origin store spiked in step with the cache miss.\n\nRoot Cause:\nNo mechanism existed to serialize origin fetches for a single key on a cache miss, so a thundering herd of identical queries hit the origin at once instead of one query populating the cache for everyone else.\n\nImpact:\nOrigin query latency spiked enough to trip an unrelated downstream timeout, briefly widening the incident's blast radius.\n\nRemediation:\nA request-coalescing layer was added in front of the origin so concurrent misses for the same key share one fetch.\n\nAction Items:\nExtend request coalescing to the other two high-traffic cache namespaces that share this same risk.",
+    "occurred_at": "2023-01-08T00:00:00Z",
+    "duration_minutes": 149,
+    "severity": "sev3",
+    "affected_service_names": [
+      "search-cache"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A single popular cache entry behind search-cache expired and every waiting request stampeded the origin simultaneously.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "No mechanism existed to serialize origin fetches for a single key on a cache miss, so a thundering herd of identical queries hit the origin at once instead of one query populating the cache for everyone else.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "A request-coalescing layer was added in front of the origin so concurrent misses for the same key share one fetch.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Origin query latency spiked enough to trip an unrelated downstream timeout, briefly widening the incident's blast radius.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "scaling_load",
+    "scenario_key": "cache_stampede"
+  },
+  {
+    "title": "auth-service: config rollout (2)",
+    "raw_text": "Summary:\nA configuration rollout to auth-service shipped a typo'd feature-flag value that disabled a required code path for every request.\n\nTimeline:\nBecause the deploy itself looked healthy in the pipeline, the team spent the first ten minutes ruling out a code regression before checking the configuration change.\n\nRoot Cause:\nThe config change was pushed directly through the admin panel rather than through the reviewed pipeline, so the typo skipped both code review and the pipeline's own validation step.\n\nImpact:\nEvery request to auth-service hit the disabled code path and returned an error for the duration of the incident.\n\nRemediation:\nConfig changes now go through the same reviewed pipeline as code, with a validation step that rejects unknown flag values instead of silently accepting them.\n\nAction Items:\nClose the admin-panel direct-edit path entirely, or at minimum require the same review as a code change.",
+    "occurred_at": "2024-02-05T00:00:00Z",
+    "duration_minutes": 27,
+    "severity": "sev3",
+    "affected_service_names": [
+      "auth-service"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A configuration rollout to auth-service shipped a typo'd feature-flag value that disabled a required code path for every request.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The config change was pushed directly through the admin panel rather than through the reviewed pipeline, so the typo skipped both code review and the pipeline's own validation step.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Config changes now go through the same reviewed pipeline as code, with a validation step that rejects unknown flag values instead of silently accepting them.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Every request to auth-service hit the disabled code path and returned an error for the duration of the incident.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "configuration_error",
+    "scenario_key": "config_rollout"
+  },
+  {
+    "title": "alerting-svc: dns failover",
+    "raw_text": "Summary:\nFailover for alerting-svc didn't take effect as fast as expected because a resolver somewhere in the path held onto a stale DNS record.\n\nTimeline:\nSome clients recovered immediately when the primary region came back up, while others stayed broken for another twenty minutes -- the split behavior was the first clue this was a DNS caching issue rather than a still-ongoing outage.\n\nRoot Cause:\nA caching resolver operated outside the team's own infrastructure did not honor the record's TTL, extending the effective outage window well past the configured failover time for anyone routed through it.\n\nImpact:\nA subset of clients experienced an extended outage window of about twenty minutes beyond the primary region's own recovery.\n\nRemediation:\nAdded an application-level health check as a second failover mechanism that doesn't depend on DNS caching behavior outside the team's control.\n\nAction Items:\nDocument which resolvers in the request path are outside the team's control and can't be trusted to honor TTL.",
+    "occurred_at": "2025-11-16T00:00:00Z",
+    "duration_minutes": 49,
+    "severity": "sev4",
+    "affected_service_names": [
+      "alerting-svc"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "Failover for alerting-svc didn't take effect as fast as expected because a resolver somewhere in the path held onto a stale DNS record.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A caching resolver operated outside the team's own infrastructure did not honor the record's TTL, extending the effective outage window well past the configured failover time for anyone routed through it.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Added an application-level health check as a second failover mechanism that doesn't depend on DNS caching behavior outside the team's control.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "A subset of clients experienced an extended outage window of about twenty minutes beyond the primary region's own recovery.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "network_connectivity",
+    "scenario_key": "dns_failover"
+  },
+  {
+    "title": "payment-gateway-adapter: cert expiry",
+    "raw_text": "Summary:\nThe TLS certificate for payment-gateway-adapter expired at midnight, and every caller started failing the handshake within seconds.\n\nTimeline:\nThe first reports were mistaken for a DNS problem, since callers just saw connection failures with no useful error detail at first glance.\n\nRoot Cause:\nCertificate renewal was a manual process the team had meant to automate the previous quarter but never got to, and nobody was tracking the expiry date on a calendar either.\n\nImpact:\nEvery caller of payment-gateway-adapter failed outright for eighteen minutes until a new certificate was issued and deployed.\n\nRemediation:\nCertificate renewal was automated end-to-end, and a 45-day-before-expiry alert was added as a backstop even for automated certificates.\n\nAction Items:\nAudit every other service for a manually-managed certificate with no expiry alerting.",
+    "occurred_at": "2024-12-01T00:00:00Z",
+    "duration_minutes": 60,
+    "severity": "sev4",
+    "affected_service_names": [
+      "payment-gateway-adapter"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "The TLS certificate for payment-gateway-adapter expired at midnight, and every caller started failing the handshake within seconds.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "Certificate renewal was a manual process the team had meant to automate the previous quarter but never got to, and nobody was tracking the expiry date on a calendar either.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Certificate renewal was automated end-to-end, and a 45-day-before-expiry alert was added as a backstop even for automated certificates.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Every caller of payment-gateway-adapter failed outright for eighteen minutes until a new certificate was issued and deployed.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "configuration_error",
+    "scenario_key": "cert_expiry"
+  },
+  {
+    "title": "email-sender: cert expiry",
+    "raw_text": "Summary:\nThe TLS certificate for email-sender expired at midnight, and every caller started failing the handshake within seconds.\n\nTimeline:\nThe first reports were mistaken for a DNS problem, since callers just saw connection failures with no useful error detail at first glance.\n\nRoot Cause:\nCertificate renewal was a manual process the team had meant to automate the previous quarter but never got to, and nobody was tracking the expiry date on a calendar either.\n\nImpact:\nEvery caller of email-sender failed outright for eighteen minutes until a new certificate was issued and deployed.\n\nRemediation:\nCertificate renewal was automated end-to-end, and a 45-day-before-expiry alert was added as a backstop even for automated certificates.\n\nAction Items:\nAudit every other service for a manually-managed certificate with no expiry alerting.",
+    "occurred_at": "2025-05-27T00:00:00Z",
+    "duration_minutes": 113,
+    "severity": "sev3",
+    "affected_service_names": [
+      "email-sender"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "The TLS certificate for email-sender expired at midnight, and every caller started failing the handshake within seconds.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "Certificate renewal was a manual process the team had meant to automate the previous quarter but never got to, and nobody was tracking the expiry date on a calendar either.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Certificate renewal was automated end-to-end, and a 45-day-before-expiry alert was added as a backstop even for automated certificates.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Every caller of email-sender failed outright for eighteen minutes until a new certificate was issued and deployed.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "configuration_error",
+    "scenario_key": "cert_expiry"
+  },
+  {
+    "title": "checkout-cache: cache stampede (3)",
+    "raw_text": "Summary:\ncheckout-cache evicted a hot key at the same moment thousands of requests needed it, and every one of them fell through to the origin at once.\n\nTimeline:\nThe team initially suspected the cache cluster itself had crashed, since request latency to it spiked at the same time.\n\nRoot Cause:\nThe hot key's TTL expired with no jitter, so every instance's local view of the cache went stale in the same millisecond, and none of them coordinated on who should repopulate it.\n\nImpact:\nThe origin datastore behind checkout-cache saw a 40x spike in read load for about ninety seconds.\n\nRemediation:\nAdded TTL jitter so keys don't all expire together, and a single-flight lock so only one request repopulates a given key while the rest wait on that result instead of all hitting the origin.\n\nAction Items:\nIdentify other high-traffic cache keys with the same synchronized-TTL risk and apply the same jitter fix proactively.",
+    "occurred_at": "2023-05-26T00:00:00Z",
+    "duration_minutes": 142,
+    "severity": "sev4",
+    "affected_service_names": [
+      "checkout-cache"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "checkout-cache evicted a hot key at the same moment thousands of requests needed it, and every one of them fell through to the origin at once.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The hot key's TTL expired with no jitter, so every instance's local view of the cache went stale in the same millisecond, and none of them coordinated on who should repopulate it.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Added TTL jitter so keys don't all expire together, and a single-flight lock so only one request repopulates a given key while the rest wait on that result instead of all hitting the origin.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "The origin datastore behind checkout-cache saw a 40x spike in read load for about ninety seconds.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "scaling_load",
+    "scenario_key": "cache_stampede"
+  },
+  {
+    "title": "service-mesh-proxy: dns failover",
+    "raw_text": "Summary:\nservice-mesh-proxy failed to fail over to the secondary region because its DNS TTL was cached far longer than configured.\n\nTimeline:\nThe primary region's own outage was resolved quickly, but traffic kept failing well past that point, which was the actual mystery on-call had to chase down.\n\nRoot Cause:\nAn intermediate resolver ignored the configured 60-second TTL and cached the primary region's record for over twenty minutes, so clients kept trying the still-down primary long after failover should have redirected them.\n\nImpact:\nClients behind the misbehaving resolver saw failures for twenty extra minutes after the primary region itself had already recovered.\n\nRemediation:\nLowered the TTL further as a partial mitigation and added an application-level health check that doesn't depend on DNS propagation timing at all.\n\nAction Items:\nStop relying on DNS TTL alone for failover timing; treat it as best-effort, not guaranteed.",
+    "occurred_at": "2025-03-15T00:00:00Z",
+    "duration_minutes": 19,
+    "severity": "sev4",
+    "affected_service_names": [
+      "service-mesh-proxy"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "service-mesh-proxy failed to fail over to the secondary region because its DNS TTL was cached far longer than configured.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "An intermediate resolver ignored the configured 60-second TTL and cached the primary region's record for over twenty minutes, so clients kept trying the still-down primary long after failover should have redirected them.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Lowered the TTL further as a partial mitigation and added an application-level health check that doesn't depend on DNS propagation timing at all.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Clients behind the misbehaving resolver saw failures for twenty extra minutes after the primary region itself had already recovered.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "network_connectivity",
+    "scenario_key": "dns_failover"
+  },
+  {
+    "title": "checkout-cache: cache stampede",
+    "raw_text": "Summary:\ncheckout-cache evicted a hot key at the same moment thousands of requests needed it, and every one of them fell through to the origin at once.\n\nTimeline:\nThe team initially suspected the cache cluster itself had crashed, since request latency to it spiked at the same time.\n\nRoot Cause:\nThe hot key's TTL expired with no jitter, so every instance's local view of the cache went stale in the same millisecond, and none of them coordinated on who should repopulate it.\n\nImpact:\nThe origin datastore behind checkout-cache saw a 40x spike in read load for about ninety seconds.\n\nRemediation:\nAdded TTL jitter so keys don't all expire together, and a single-flight lock so only one request repopulates a given key while the rest wait on that result instead of all hitting the origin.\n\nAction Items:\nIdentify other high-traffic cache keys with the same synchronized-TTL risk and apply the same jitter fix proactively.",
+    "occurred_at": "2025-07-25T00:00:00Z",
+    "duration_minutes": 59,
+    "severity": "sev2",
+    "affected_service_names": [
+      "checkout-cache"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "checkout-cache evicted a hot key at the same moment thousands of requests needed it, and every one of them fell through to the origin at once.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The hot key's TTL expired with no jitter, so every instance's local view of the cache went stale in the same millisecond, and none of them coordinated on who should repopulate it.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Added TTL jitter so keys don't all expire together, and a single-flight lock so only one request repopulates a given key while the rest wait on that result instead of all hitting the origin.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "The origin datastore behind checkout-cache saw a 40x spike in read load for about ninety seconds.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "scaling_load",
+    "scenario_key": "cache_stampede"
+  },
+  {
+    "title": "payment-gateway-adapter: retry storm (2)",
+    "raw_text": "Summary:\nA short-lived hiccup calling out to payment-gateway-adapter turned into a self-inflicted overload once the retries synchronized.\n\nTimeline:\nDashboards initially suggested the incident was still ongoing on the provider side, delaying the correct diagnosis.\n\nRoot Cause:\nA fixed one-second retry interval, shared by every instance of the calling service, meant thousands of retries fired in the same one-second window over and over.\n\nImpact:\nRequest volume against payment-gateway-adapter was three times normal for nearly half an hour after the original blip resolved.\n\nRemediation:\nRetries now use randomized jitter so instances no longer retry in lockstep, and a circuit breaker caps concurrent outbound retries.\n\nAction Items:\nAdd an automated check that flags any new outbound client missing jitter in its retry configuration.",
+    "occurred_at": "2024-08-08T00:00:00Z",
+    "duration_minutes": 46,
+    "severity": "sev1",
+    "affected_service_names": [
+      "payment-gateway-adapter"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A short-lived hiccup calling out to payment-gateway-adapter turned into a self-inflicted overload once the retries synchronized.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A fixed one-second retry interval, shared by every instance of the calling service, meant thousands of retries fired in the same one-second window over and over.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Retries now use randomized jitter so instances no longer retry in lockstep, and a circuit breaker caps concurrent outbound retries.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Request volume against payment-gateway-adapter was three times normal for nearly half an hour after the original blip resolved.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "scaling_load",
+    "scenario_key": "retry_storm"
+  },
+  {
+    "title": "log-aggregator: dns failover",
+    "raw_text": "Summary:\nlog-aggregator failed to fail over to the secondary region because its DNS TTL was cached far longer than configured.\n\nTimeline:\nThe primary region's own outage was resolved quickly, but traffic kept failing well past that point, which was the actual mystery on-call had to chase down.\n\nRoot Cause:\nAn intermediate resolver ignored the configured 60-second TTL and cached the primary region's record for over twenty minutes, so clients kept trying the still-down primary long after failover should have redirected them.\n\nImpact:\nClients behind the misbehaving resolver saw failures for twenty extra minutes after the primary region itself had already recovered.\n\nRemediation:\nLowered the TTL further as a partial mitigation and added an application-level health check that doesn't depend on DNS propagation timing at all.\n\nAction Items:\nStop relying on DNS TTL alone for failover timing; treat it as best-effort, not guaranteed.",
+    "occurred_at": "2025-04-10T00:00:00Z",
+    "duration_minutes": 102,
+    "severity": "sev1",
+    "affected_service_names": [
+      "log-aggregator"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "log-aggregator failed to fail over to the secondary region because its DNS TTL was cached far longer than configured.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "An intermediate resolver ignored the configured 60-second TTL and cached the primary region's record for over twenty minutes, so clients kept trying the still-down primary long after failover should have redirected them.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Lowered the TTL further as a partial mitigation and added an application-level health check that doesn't depend on DNS propagation timing at all.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Clients behind the misbehaving resolver saw failures for twenty extra minutes after the primary region itself had already recovered.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "network_connectivity",
+    "scenario_key": "dns_failover"
+  },
+  {
+    "title": "checkout-api: config rollout (2)",
+    "raw_text": "Summary:\nAn unreviewed config push to checkout-api flipped a flag to an invalid value and broke a required request path instantly.\n\nTimeline:\nThe rollout itself wasn't flagged as risky by anyone since it was 'just a config change,' which is exactly why it skipped the scrutiny a code change would have gotten.\n\nRoot Cause:\nNo schema validation existed for this particular flag's allowed values, so a typo produced a value the code silently treated as 'disabled' instead of raising an error.\n\nImpact:\nA full outage of the affected request path in checkout-api until the config was rolled back.\n\nRemediation:\nAdded schema validation for every feature-flag value and required config changes to go through the same review gate as code.\n\nAction Items:\nRetroactively add schema validation to every existing flag, not just newly created ones.",
+    "occurred_at": "2023-04-21T00:00:00Z",
+    "duration_minutes": 70,
+    "severity": "sev3",
+    "affected_service_names": [
+      "checkout-api"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "An unreviewed config push to checkout-api flipped a flag to an invalid value and broke a required request path instantly.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "No schema validation existed for this particular flag's allowed values, so a typo produced a value the code silently treated as 'disabled' instead of raising an error.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Added schema validation for every feature-flag value and required config changes to go through the same review gate as code.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "A full outage of the affected request path in checkout-api until the config was rolled back.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "configuration_error",
+    "scenario_key": "config_rollout"
+  },
+  {
+    "title": "push-notification-svc: quota exhaustion",
+    "raw_text": "Summary:\npush-notification-svc hit its external provider's rate quota mid-day and every call past that point was rejected until the quota reset.\n\nTimeline:\nThe team initially assumed the provider itself was having an outage, since the error responses didn't clearly indicate a quota rejection.\n\nRoot Cause:\nUsage had grown steadily over the past month, but nobody was tracking usage against the fixed quota, so the threshold was crossed with no warning.\n\nImpact:\nEvery call to push-notification-svc past the quota limit failed for the rest of the billing period until the quota reset at midnight.\n\nRemediation:\nRequested a quota increase from the provider and added usage-tracking alerting at 80% of the current limit.\n\nAction Items:\nSet up the same usage-tracking alert for every other external provider with a fixed quota.",
+    "occurred_at": "2023-01-18T00:00:00Z",
+    "duration_minutes": 47,
+    "severity": "sev1",
+    "affected_service_names": [
+      "push-notification-svc"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "push-notification-svc hit its external provider's rate quota mid-day and every call past that point was rejected until the quota reset.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "Usage had grown steadily over the past month, but nobody was tracking usage against the fixed quota, so the threshold was crossed with no warning.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Requested a quota increase from the provider and added usage-tracking alerting at 80% of the current limit.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Every call to push-notification-svc past the quota limit failed for the rest of the billing period until the quota reset at midnight.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "quota_exhaustion"
+  },
+  {
+    "title": "message-bus: poison message",
+    "raw_text": "Summary:\nA single malformed message on message-bus was repeatedly redelivered and crashed every consumer that tried to process it.\n\nTimeline:\nThe on-call engineer initially restarted the consumer fleet, which briefly appeared to help before the same crash recurred within a minute.\n\nRoot Cause:\nA message with an unexpected null field bypassed input validation at the producer, and the consumer's deserializer threw an unhandled exception on every delivery attempt instead of moving the message aside.\n\nImpact:\nThe consumer fleet crash-looped for close to an hour, backing up the rest of the queue behind the one bad message.\n\nRemediation:\nAdded a dead-letter queue so a message that fails processing a fixed number of times is moved aside instead of blocking the whole queue, plus stricter producer-side validation.\n\nAction Items:\nAdd a schema-validation gate at the producer for every topic that doesn't already have one.",
+    "occurred_at": "2024-02-15T00:00:00Z",
+    "duration_minutes": 21,
+    "severity": "sev1",
+    "affected_service_names": [
+      "message-bus"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A single malformed message on message-bus was repeatedly redelivered and crashed every consumer that tried to process it.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A message with an unexpected null field bypassed input validation at the producer, and the consumer's deserializer threw an unhandled exception on every delivery attempt instead of moving the message aside.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Added a dead-letter queue so a message that fails processing a fixed number of times is moved aside instead of blocking the whole queue, plus stricter producer-side validation.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "The consumer fleet crash-looped for close to an hour, backing up the rest of the queue behind the one bad message.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "code_defect",
+    "scenario_key": "poison_message"
+  },
+  {
+    "title": "sms-gateway: retry storm",
+    "raw_text": "Summary:\nA short-lived hiccup calling out to sms-gateway turned into a self-inflicted overload once the retries synchronized.\n\nTimeline:\nDashboards initially suggested the incident was still ongoing on the provider side, delaying the correct diagnosis.\n\nRoot Cause:\nA fixed one-second retry interval, shared by every instance of the calling service, meant thousands of retries fired in the same one-second window over and over.\n\nImpact:\nRequest volume against sms-gateway was three times normal for nearly half an hour after the original blip resolved.\n\nRemediation:\nRetries now use randomized jitter so instances no longer retry in lockstep, and a circuit breaker caps concurrent outbound retries.\n\nAction Items:\nAdd an automated check that flags any new outbound client missing jitter in its retry configuration.",
+    "occurred_at": "2025-03-03T00:00:00Z",
+    "duration_minutes": 22,
+    "severity": "sev2",
+    "affected_service_names": [
+      "sms-gateway"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A short-lived hiccup calling out to sms-gateway turned into a self-inflicted overload once the retries synchronized.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A fixed one-second retry interval, shared by every instance of the calling service, meant thousands of retries fired in the same one-second window over and over.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Retries now use randomized jitter so instances no longer retry in lockstep, and a circuit breaker caps concurrent outbound retries.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Request volume against sms-gateway was three times normal for nearly half an hour after the original blip resolved.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "scaling_load",
+    "scenario_key": "retry_storm"
+  },
+  {
+    "title": "service-mesh-proxy: clock skew",
+    "raw_text": "Summary:\nAn NTP sync failure let service-mesh-proxy's clock drift far enough that time-based auth tokens started being rejected as expired the moment they were issued.\n\nTimeline:\nThe first theory was a bug in the token-issuing code itself, since the tokens looked correctly formed -- just always expired.\n\nRoot Cause:\nThe NTP daemon on the affected host had silently stopped syncing three days earlier, and the host's clock had drifted almost four minutes ahead of real time by the time tokens started failing validation.\n\nImpact:\nEvery token issued from the affected host was rejected downstream as already expired.\n\nRemediation:\nRestarted NTP sync and added host-level clock-drift alerting instead of relying on NTP daemon health alone.\n\nAction Items:\nAudit every host's NTP daemon status rather than assuming it's running because it was configured to be.",
+    "occurred_at": "2023-05-11T00:00:00Z",
+    "duration_minutes": 115,
+    "severity": "sev2",
+    "affected_service_names": [
+      "service-mesh-proxy"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "An NTP sync failure let service-mesh-proxy's clock drift far enough that time-based auth tokens started being rejected as expired the moment they were issued.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The NTP daemon on the affected host had silently stopped syncing three days earlier, and the host's clock had drifted almost four minutes ahead of real time by the time tokens started failing validation.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Restarted NTP sync and added host-level clock-drift alerting instead of relying on NTP daemon health alone.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Every token issued from the affected host was rejected downstream as already expired.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "infrastructure_hardware",
+    "scenario_key": "clock_skew"
+  },
+  {
+    "title": "sso-gateway: retry storm",
+    "raw_text": "Summary:\nA short-lived hiccup calling out to sso-gateway turned into a self-inflicted overload once the retries synchronized.\n\nTimeline:\nDashboards initially suggested the incident was still ongoing on the provider side, delaying the correct diagnosis.\n\nRoot Cause:\nA fixed one-second retry interval, shared by every instance of the calling service, meant thousands of retries fired in the same one-second window over and over.\n\nImpact:\nRequest volume against sso-gateway was three times normal for nearly half an hour after the original blip resolved.\n\nRemediation:\nRetries now use randomized jitter so instances no longer retry in lockstep, and a circuit breaker caps concurrent outbound retries.\n\nAction Items:\nAdd an automated check that flags any new outbound client missing jitter in its retry configuration.",
+    "occurred_at": "2023-11-11T00:00:00Z",
+    "duration_minutes": 130,
+    "severity": "sev2",
+    "affected_service_names": [
+      "sso-gateway"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A short-lived hiccup calling out to sso-gateway turned into a self-inflicted overload once the retries synchronized.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A fixed one-second retry interval, shared by every instance of the calling service, meant thousands of retries fired in the same one-second window over and over.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Retries now use randomized jitter so instances no longer retry in lockstep, and a circuit breaker caps concurrent outbound retries.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Request volume against sso-gateway was three times normal for nearly half an hour after the original blip resolved.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "scaling_load",
+    "scenario_key": "retry_storm"
+  },
+  {
+    "title": "order-service: thread pool starvation",
+    "raw_text": "Summary:\norder-service's shared worker pool was starved by one endpoint's unbounded downstream call, degrading every other endpoint that shared the same pool.\n\nTimeline:\nOn-call initially scaled up the instance count, which helped only briefly before the larger pool starved the same way under continued load.\n\nRoot Cause:\nThe pool-starving endpoint had no circuit breaker and no timeout, so each slow downstream call held its thread for the full length of the downstream's own hang.\n\nImpact:\nEvery endpoint sharing the pool saw degraded latency, widening what looked at first like an isolated problem into a service-wide one.\n\nRemediation:\nIsolated the offending endpoint into its own bounded thread pool with a hard timeout, so it can now only ever starve itself.\n\nAction Items:\nApply the same per-endpoint pool isolation to every other endpoint making a downstream call with no timeout.",
+    "occurred_at": "2025-08-14T00:00:00Z",
+    "duration_minutes": 94,
+    "severity": "sev4",
+    "affected_service_names": [
+      "order-service"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "order-service's shared worker pool was starved by one endpoint's unbounded downstream call, degrading every other endpoint that shared the same pool.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The pool-starving endpoint had no circuit breaker and no timeout, so each slow downstream call held its thread for the full length of the downstream's own hang.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Isolated the offending endpoint into its own bounded thread pool with a hard timeout, so it can now only ever starve itself.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Every endpoint sharing the pool saw degraded latency, widening what looked at first like an isolated problem into a service-wide one.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "thread_pool_starvation"
+  },
+  {
+    "title": "metrics-collector: dns failover",
+    "raw_text": "Summary:\nFailover for metrics-collector didn't take effect as fast as expected because a resolver somewhere in the path held onto a stale DNS record.\n\nTimeline:\nSome clients recovered immediately when the primary region came back up, while others stayed broken for another twenty minutes -- the split behavior was the first clue this was a DNS caching issue rather than a still-ongoing outage.\n\nRoot Cause:\nA caching resolver operated outside the team's own infrastructure did not honor the record's TTL, extending the effective outage window well past the configured failover time for anyone routed through it.\n\nImpact:\nA subset of clients experienced an extended outage window of about twenty minutes beyond the primary region's own recovery.\n\nRemediation:\nAdded an application-level health check as a second failover mechanism that doesn't depend on DNS caching behavior outside the team's control.\n\nAction Items:\nDocument which resolvers in the request path are outside the team's control and can't be trusted to honor TTL.",
+    "occurred_at": "2023-01-31T00:00:00Z",
+    "duration_minutes": 171,
+    "severity": "sev3",
+    "affected_service_names": [
+      "metrics-collector"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "Failover for metrics-collector didn't take effect as fast as expected because a resolver somewhere in the path held onto a stale DNS record.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A caching resolver operated outside the team's own infrastructure did not honor the record's TTL, extending the effective outage window well past the configured failover time for anyone routed through it.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Added an application-level health check as a second failover mechanism that doesn't depend on DNS caching behavior outside the team's control.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "A subset of clients experienced an extended outage window of about twenty minutes beyond the primary region's own recovery.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "network_connectivity",
+    "scenario_key": "dns_failover"
+  },
+  {
+    "title": "message-bus: poison message (4)",
+    "raw_text": "Summary:\nA single malformed message on message-bus was repeatedly redelivered and crashed every consumer that tried to process it.\n\nTimeline:\nThe on-call engineer initially restarted the consumer fleet, which briefly appeared to help before the same crash recurred within a minute.\n\nRoot Cause:\nA message with an unexpected null field bypassed input validation at the producer, and the consumer's deserializer threw an unhandled exception on every delivery attempt instead of moving the message aside.\n\nImpact:\nThe consumer fleet crash-looped for close to an hour, backing up the rest of the queue behind the one bad message.\n\nRemediation:\nAdded a dead-letter queue so a message that fails processing a fixed number of times is moved aside instead of blocking the whole queue, plus stricter producer-side validation.\n\nAction Items:\nAdd a schema-validation gate at the producer for every topic that doesn't already have one.",
+    "occurred_at": "2023-06-08T00:00:00Z",
+    "duration_minutes": 29,
+    "severity": "sev2",
+    "affected_service_names": [
+      "message-bus"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A single malformed message on message-bus was repeatedly redelivered and crashed every consumer that tried to process it.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A message with an unexpected null field bypassed input validation at the producer, and the consumer's deserializer threw an unhandled exception on every delivery attempt instead of moving the message aside.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Added a dead-letter queue so a message that fails processing a fixed number of times is moved aside instead of blocking the whole queue, plus stricter producer-side validation.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "The consumer fleet crash-looped for close to an hour, backing up the rest of the queue behind the one bad message.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "code_defect",
+    "scenario_key": "poison_message"
+  },
+  {
+    "title": "dns-resolver: clock skew",
+    "raw_text": "Summary:\nA drifting system clock on one host running dns-resolver caused every short-lived token it issued to look already expired to everyone else.\n\nTimeline:\nBecause only one host out of the fleet was affected, the failure was intermittent and initially looked like a flaky-test-style false alarm rather than a real, ongoing issue.\n\nRoot Cause:\nA virtualization-layer change had disabled the hypervisor's own time synchronization for one host in the fleet, and that host's local NTP client never caught the resulting drift.\n\nImpact:\nRoughly one-fourth of requests -- the fraction routed to the drifting host -- failed token validation.\n\nRemediation:\nRe-enabled hypervisor time sync and added a fleet-wide clock-drift check independent of NTP daemon status.\n\nAction Items:\nAdd the clock-drift check to the standard host health check run before a host is added back to rotation.",
+    "occurred_at": "2024-04-01T00:00:00Z",
+    "duration_minutes": 17,
+    "severity": "sev4",
+    "affected_service_names": [
+      "dns-resolver"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A drifting system clock on one host running dns-resolver caused every short-lived token it issued to look already expired to everyone else.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A virtualization-layer change had disabled the hypervisor's own time synchronization for one host in the fleet, and that host's local NTP client never caught the resulting drift.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Re-enabled hypervisor time sync and added a fleet-wide clock-drift check independent of NTP daemon status.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Roughly one-fourth of requests -- the fraction routed to the drifting host -- failed token validation.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "infrastructure_hardware",
+    "scenario_key": "clock_skew"
+  },
+  {
+    "title": "search-cache: cache stampede",
+    "raw_text": "Summary:\nsearch-cache evicted a hot key at the same moment thousands of requests needed it, and every one of them fell through to the origin at once.\n\nTimeline:\nThe team initially suspected the cache cluster itself had crashed, since request latency to it spiked at the same time.\n\nRoot Cause:\nThe hot key's TTL expired with no jitter, so every instance's local view of the cache went stale in the same millisecond, and none of them coordinated on who should repopulate it.\n\nImpact:\nThe origin datastore behind search-cache saw a 40x spike in read load for about ninety seconds.\n\nRemediation:\nAdded TTL jitter so keys don't all expire together, and a single-flight lock so only one request repopulates a given key while the rest wait on that result instead of all hitting the origin.\n\nAction Items:\nIdentify other high-traffic cache keys with the same synchronized-TTL risk and apply the same jitter fix proactively.",
+    "occurred_at": "2023-07-24T00:00:00Z",
+    "duration_minutes": 48,
+    "severity": "sev3",
+    "affected_service_names": [
+      "search-cache"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "search-cache evicted a hot key at the same moment thousands of requests needed it, and every one of them fell through to the origin at once.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The hot key's TTL expired with no jitter, so every instance's local view of the cache went stale in the same millisecond, and none of them coordinated on who should repopulate it.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Added TTL jitter so keys don't all expire together, and a single-flight lock so only one request repopulates a given key while the rest wait on that result instead of all hitting the origin.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "The origin datastore behind search-cache saw a 40x spike in read load for about ninety seconds.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "scaling_load",
+    "scenario_key": "cache_stampede"
+  },
+  {
+    "title": "email-sender: quota exhaustion",
+    "raw_text": "Summary:\nemail-sender hit its external provider's rate quota mid-day and every call past that point was rejected until the quota reset.\n\nTimeline:\nThe team initially assumed the provider itself was having an outage, since the error responses didn't clearly indicate a quota rejection.\n\nRoot Cause:\nUsage had grown steadily over the past month, but nobody was tracking usage against the fixed quota, so the threshold was crossed with no warning.\n\nImpact:\nEvery call to email-sender past the quota limit failed for the rest of the billing period until the quota reset at midnight.\n\nRemediation:\nRequested a quota increase from the provider and added usage-tracking alerting at 80% of the current limit.\n\nAction Items:\nSet up the same usage-tracking alert for every other external provider with a fixed quota.",
+    "occurred_at": "2025-10-29T00:00:00Z",
+    "duration_minutes": 127,
+    "severity": "sev3",
+    "affected_service_names": [
+      "email-sender"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "email-sender hit its external provider's rate quota mid-day and every call past that point was rejected until the quota reset.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "Usage had grown steadily over the past month, but nobody was tracking usage against the fixed quota, so the threshold was crossed with no warning.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Requested a quota increase from the provider and added usage-tracking alerting at 80% of the current limit.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Every call to email-sender past the quota limit failed for the rest of the billing period until the quota reset at midnight.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "quota_exhaustion"
+  },
+  {
+    "title": "notification-queue: poison message (2)",
+    "raw_text": "Summary:\nOne bad event on notification-queue kept getting redelivered and taking down whichever consumer instance picked it up next.\n\nTimeline:\nMetrics showed consumer lag growing steadily, which initially looked like a simple capacity problem rather than a single message repeatedly crashing every worker.\n\nRoot Cause:\nThe consumer had no per-message retry limit, so a message that always fails to deserialize was retried forever, each attempt crashing the worker that picked it up.\n\nImpact:\nQueue lag grew for the better part of an hour before the actual cause -- one message, not a capacity shortfall -- was identified.\n\nRemediation:\nA maximum redelivery count now routes a repeatedly-failing message to a dead-letter queue for manual inspection instead of endless retry.\n\nAction Items:\nBuild a small dashboard for dead-letter queue depth so a growing pile of poison messages is visible before it causes an incident.",
+    "occurred_at": "2025-07-17T00:00:00Z",
+    "duration_minutes": 129,
+    "severity": "sev2",
+    "affected_service_names": [
+      "notification-queue"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "One bad event on notification-queue kept getting redelivered and taking down whichever consumer instance picked it up next.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The consumer had no per-message retry limit, so a message that always fails to deserialize was retried forever, each attempt crashing the worker that picked it up.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "A maximum redelivery count now routes a repeatedly-failing message to a dead-letter queue for manual inspection instead of endless retry.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Queue lag grew for the better part of an hour before the actual cause -- one message, not a capacity shortfall -- was identified.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "code_defect",
+    "scenario_key": "poison_message"
+  },
+  {
+    "title": "sso-gateway: retry storm (2)",
+    "raw_text": "Summary:\nA brief upstream blip on sso-gateway triggered a retry storm that outlasted the original outage by twenty minutes.\n\nTimeline:\nOn-call first assumed the upstream provider was still down, but the provider's own status page had already recovered five minutes earlier.\n\nRoot Cause:\nEvery caller retried failed requests immediately with no backoff or jitter, so the moment the upstream recovered it was immediately re-saturated by a synchronized wave of retries.\n\nImpact:\nSustained 3x normal request volume against sso-gateway for twenty minutes after the real outage had already ended.\n\nRemediation:\nExponential backoff with jitter was added to every retry path calling sso-gateway, and a circuit breaker now trips after a threshold of consecutive failures.\n\nAction Items:\nStandardize the retry/backoff library across all outbound HTTP clients instead of each team implementing its own.",
+    "occurred_at": "2024-04-13T00:00:00Z",
+    "duration_minutes": 67,
+    "severity": "sev3",
+    "affected_service_names": [
+      "sso-gateway"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A brief upstream blip on sso-gateway triggered a retry storm that outlasted the original outage by twenty minutes.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "Every caller retried failed requests immediately with no backoff or jitter, so the moment the upstream recovered it was immediately re-saturated by a synchronized wave of retries.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Exponential backoff with jitter was added to every retry path calling sso-gateway, and a circuit breaker now trips after a threshold of consecutive failures.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Sustained 3x normal request volume against sso-gateway for twenty minutes after the real outage had already ended.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "scaling_load",
+    "scenario_key": "retry_storm"
+  },
+  {
+    "title": "order-service: dependency version drift",
+    "raw_text": "Summary:\norder-service started behaving differently after a routine dependency upgrade quietly changed a default configuration value.\n\nTimeline:\nSymptoms were intermittent at first, which delayed connecting them to a dependency bump that had shipped two days earlier with no apparent issues at the time.\n\nRoot Cause:\nA transitive dependency's own minor version bump changed a connection-pooling default several layers removed from the direct dependency the team had actually reviewed.\n\nImpact:\nIntermittent elevated latency in order-service for two days before the actual cause was identified.\n\nRemediation:\nPinned the transitive dependency's version explicitly and added a diff review step covering transitive, not just direct, dependency changes.\n\nAction Items:\nAdd automated alerting on any transitive dependency version change, not only direct ones.",
+    "occurred_at": "2024-07-28T00:00:00Z",
+    "duration_minutes": 146,
+    "severity": "sev2",
+    "affected_service_names": [
+      "order-service"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "order-service started behaving differently after a routine dependency upgrade quietly changed a default configuration value.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A transitive dependency's own minor version bump changed a connection-pooling default several layers removed from the direct dependency the team had actually reviewed.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Pinned the transitive dependency's version explicitly and added a diff review step covering transitive, not just direct, dependency changes.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Intermittent elevated latency in order-service for two days before the actual cause was identified.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "dependency_failure",
+    "scenario_key": "dependency_version_drift"
+  },
+  {
+    "title": "user-profile-svc: dependency version drift",
+    "raw_text": "Summary:\nA minor version bump of a shared library used by user-profile-svc silently changed a default timeout, and nobody caught it in review.\n\nTimeline:\nThe regression only showed up under real production load, since the staging environment's traffic volume never exercised the changed timeout.\n\nRoot Cause:\nThe library's changelog didn't call out the default value change as breaking, and the team's dependency-update process didn't include reading the diff of default values, only the changelog's own headline bullets.\n\nImpact:\nA subset of requests through user-profile-svc began timing out under peak load that had previously completed successfully.\n\nRemediation:\nPinned the previous default explicitly rather than relying on the library's default, and added a load test to the dependency-upgrade checklist.\n\nAction Items:\nReview every other shared library dependency for implicitly-relied-upon default values.",
+    "occurred_at": "2025-07-19T00:00:00Z",
+    "duration_minutes": 168,
+    "severity": "sev3",
+    "affected_service_names": [
+      "user-profile-svc"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A minor version bump of a shared library used by user-profile-svc silently changed a default timeout, and nobody caught it in review.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The library's changelog didn't call out the default value change as breaking, and the team's dependency-update process didn't include reading the diff of default values, only the changelog's own headline bullets.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Pinned the previous default explicitly rather than relying on the library's default, and added a load test to the dependency-upgrade checklist.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "A subset of requests through user-profile-svc began timing out under peak load that had previously completed successfully.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "dependency_failure",
+    "scenario_key": "dependency_version_drift"
+  },
+  {
+    "title": "alerting-svc: clock skew",
+    "raw_text": "Summary:\nA drifting system clock on one host running alerting-svc caused every short-lived token it issued to look already expired to everyone else.\n\nTimeline:\nBecause only one host out of the fleet was affected, the failure was intermittent and initially looked like a flaky-test-style false alarm rather than a real, ongoing issue.\n\nRoot Cause:\nA virtualization-layer change had disabled the hypervisor's own time synchronization for one host in the fleet, and that host's local NTP client never caught the resulting drift.\n\nImpact:\nRoughly one-fourth of requests -- the fraction routed to the drifting host -- failed token validation.\n\nRemediation:\nRe-enabled hypervisor time sync and added a fleet-wide clock-drift check independent of NTP daemon status.\n\nAction Items:\nAdd the clock-drift check to the standard host health check run before a host is added back to rotation.",
+    "occurred_at": "2024-05-27T00:00:00Z",
+    "duration_minutes": 150,
+    "severity": "sev3",
+    "affected_service_names": [
+      "alerting-svc"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A drifting system clock on one host running alerting-svc caused every short-lived token it issued to look already expired to everyone else.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A virtualization-layer change had disabled the hypervisor's own time synchronization for one host in the fleet, and that host's local NTP client never caught the resulting drift.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Re-enabled hypervisor time sync and added a fleet-wide clock-drift check independent of NTP daemon status.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Roughly one-fourth of requests -- the fraction routed to the drifting host -- failed token validation.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "infrastructure_hardware",
+    "scenario_key": "clock_skew"
+  },
+  {
+    "title": "payments-svc: dependency version drift",
+    "raw_text": "Summary:\nA minor version bump of a shared library used by payments-svc silently changed a default timeout, and nobody caught it in review.\n\nTimeline:\nThe regression only showed up under real production load, since the staging environment's traffic volume never exercised the changed timeout.\n\nRoot Cause:\nThe library's changelog didn't call out the default value change as breaking, and the team's dependency-update process didn't include reading the diff of default values, only the changelog's own headline bullets.\n\nImpact:\nA subset of requests through payments-svc began timing out under peak load that had previously completed successfully.\n\nRemediation:\nPinned the previous default explicitly rather than relying on the library's default, and added a load test to the dependency-upgrade checklist.\n\nAction Items:\nReview every other shared library dependency for implicitly-relied-upon default values.",
+    "occurred_at": "2023-03-29T00:00:00Z",
+    "duration_minutes": 164,
+    "severity": "sev2",
+    "affected_service_names": [
+      "payments-svc"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A minor version bump of a shared library used by payments-svc silently changed a default timeout, and nobody caught it in review.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The library's changelog didn't call out the default value change as breaking, and the team's dependency-update process didn't include reading the diff of default values, only the changelog's own headline bullets.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Pinned the previous default explicitly rather than relying on the library's default, and added a load test to the dependency-upgrade checklist.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "A subset of requests through payments-svc began timing out under peak load that had previously completed successfully.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "dependency_failure",
+    "scenario_key": "dependency_version_drift"
+  },
+  {
+    "title": "payment-gateway-adapter: retry storm",
+    "raw_text": "Summary:\nA brief upstream blip on payment-gateway-adapter triggered a retry storm that outlasted the original outage by twenty minutes.\n\nTimeline:\nOn-call first assumed the upstream provider was still down, but the provider's own status page had already recovered five minutes earlier.\n\nRoot Cause:\nEvery caller retried failed requests immediately with no backoff or jitter, so the moment the upstream recovered it was immediately re-saturated by a synchronized wave of retries.\n\nImpact:\nSustained 3x normal request volume against payment-gateway-adapter for twenty minutes after the real outage had already ended.\n\nRemediation:\nExponential backoff with jitter was added to every retry path calling payment-gateway-adapter, and a circuit breaker now trips after a threshold of consecutive failures.\n\nAction Items:\nStandardize the retry/backoff library across all outbound HTTP clients instead of each team implementing its own.",
+    "occurred_at": "2024-06-14T00:00:00Z",
+    "duration_minutes": 85,
+    "severity": "sev3",
+    "affected_service_names": [
+      "payment-gateway-adapter"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A brief upstream blip on payment-gateway-adapter triggered a retry storm that outlasted the original outage by twenty minutes.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "Every caller retried failed requests immediately with no backoff or jitter, so the moment the upstream recovered it was immediately re-saturated by a synchronized wave of retries.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Exponential backoff with jitter was added to every retry path calling payment-gateway-adapter, and a circuit breaker now trips after a threshold of consecutive failures.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Sustained 3x normal request volume against payment-gateway-adapter for twenty minutes after the real outage had already ended.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "scaling_load",
+    "scenario_key": "retry_storm"
+  },
+  {
+    "title": "fraud-detection: dependency version drift",
+    "raw_text": "Summary:\nA minor version bump of a shared library used by fraud-detection silently changed a default timeout, and nobody caught it in review.\n\nTimeline:\nThe regression only showed up under real production load, since the staging environment's traffic volume never exercised the changed timeout.\n\nRoot Cause:\nThe library's changelog didn't call out the default value change as breaking, and the team's dependency-update process didn't include reading the diff of default values, only the changelog's own headline bullets.\n\nImpact:\nA subset of requests through fraud-detection began timing out under peak load that had previously completed successfully.\n\nRemediation:\nPinned the previous default explicitly rather than relying on the library's default, and added a load test to the dependency-upgrade checklist.\n\nAction Items:\nReview every other shared library dependency for implicitly-relied-upon default values.",
+    "occurred_at": "2024-10-27T00:00:00Z",
+    "duration_minutes": 178,
+    "severity": "sev4",
+    "affected_service_names": [
+      "fraud-detection"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A minor version bump of a shared library used by fraud-detection silently changed a default timeout, and nobody caught it in review.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "The library's changelog didn't call out the default value change as breaking, and the team's dependency-update process didn't include reading the diff of default values, only the changelog's own headline bullets.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Pinned the previous default explicitly rather than relying on the library's default, and added a load test to the dependency-upgrade checklist.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "A subset of requests through fraud-detection began timing out under peak load that had previously completed successfully.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "dependency_failure",
+    "scenario_key": "dependency_version_drift"
+  },
+  {
+    "title": "catalog-db: disk saturation",
+    "raw_text": "Summary:\ncatalog-db's disk filled up from unbounded log retention, and writes started failing once there was no space left.\n\nTimeline:\nThe first alert was a generic disk-space warning that was acknowledged but not acted on for several hours before writes actually started failing.\n\nRoot Cause:\nA log-rotation policy that was supposed to cap retention at 14 days had silently stopped running after a configuration change months earlier, and nobody noticed until the disk was completely full.\n\nImpact:\nWrite operations against catalog-db failed for close to forty minutes while space was cleared.\n\nRemediation:\nRestored the log-rotation job, added a hard alert threshold at 85% disk usage instead of only at 95%, and moved older logs to cheaper cold storage automatically.\n\nAction Items:\nReview every other host's log-retention configuration for the same silent-failure risk.",
+    "occurred_at": "2025-08-23T00:00:00Z",
+    "duration_minutes": 43,
+    "severity": "sev4",
+    "affected_service_names": [
+      "catalog-db"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "catalog-db's disk filled up from unbounded log retention, and writes started failing once there was no space left.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "A log-rotation policy that was supposed to cap retention at 14 days had silently stopped running after a configuration change months earlier, and nobody noticed until the disk was completely full.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Restored the log-rotation job, added a hard alert threshold at 85% disk usage instead of only at 95%, and moved older logs to cheaper cold storage automatically.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Write operations against catalog-db failed for close to forty minutes while space was cleared.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "disk_saturation"
+  },
+  {
+    "title": "cart-service: thread pool starvation",
+    "raw_text": "Summary:\nA slow downstream call on cart-service held worker threads long enough that the thread pool starved and every other request queued behind it.\n\nTimeline:\nRequest latency climbed gradually rather than spiking, which delayed recognizing this as thread starvation rather than a simple traffic increase.\n\nRoot Cause:\nOne endpoint made a synchronous call to a slow downstream dependency with no timeout, so under load enough threads were parked waiting on that one call that the shared pool had nothing left for any other endpoint.\n\nImpact:\nLatency across every endpoint on cart-service degraded, not just the one making the slow call, since they all shared the same thread pool.\n\nRemediation:\nAdded an explicit timeout on the slow downstream call and moved it to its own isolated thread pool so it can't starve unrelated endpoints.\n\nAction Items:\nAudit every synchronous downstream call on cart-service for a missing timeout.",
+    "occurred_at": "2025-11-23T00:00:00Z",
+    "duration_minutes": 161,
+    "severity": "sev4",
+    "affected_service_names": [
+      "cart-service"
+    ],
+    "facts": [
+      {
+        "fact_type": "trigger",
+        "statement": "A slow downstream call on cart-service held worker threads long enough that the thread pool starved and every other request queued behind it.",
+        "section_label": "Summary"
+      },
+      {
+        "fact_type": "root_cause",
+        "statement": "One endpoint made a synchronous call to a slow downstream dependency with no timeout, so under load enough threads were parked waiting on that one call that the shared pool had nothing left for any other endpoint.",
+        "section_label": "Root Cause"
+      },
+      {
+        "fact_type": "remediation",
+        "statement": "Added an explicit timeout on the slow downstream call and moved it to its own isolated thread pool so it can't starve unrelated endpoints.",
+        "section_label": "Remediation"
+      },
+      {
+        "fact_type": "contributing_factor",
+        "statement": "Latency across every endpoint on cart-service degraded, not just the one making the slow call, since they all shared the same thread pool.",
+        "section_label": "Impact"
+      }
+    ],
+    "failure_mode": "capacity_exhaustion",
+    "scenario_key": "thread_pool_starvation"
+  }
+]

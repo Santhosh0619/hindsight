@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusPill } from "@/components/ui/status-pill";
 import { getIncident, listBriefs, streamBrief } from "@/lib/api";
-import { useAuth, useRequireRole } from "@/lib/auth";
+import { useAuth, useCanGenerateBrief } from "@/lib/auth";
 import type { AgentStreamEvent, BriefOut, IncidentOut, IncidentStatus } from "@/lib/types";
 
 const STATUS_TONE: Record<IncidentStatus, "muted" | "success" | "warning" | "destructive"> = {
@@ -24,7 +24,7 @@ export function IncidentDetail(): React.JSX.Element {
   const { id } = useParams<{ id: string }>();
   const { currentMembership } = useAuth();
   const workspaceId = currentMembership?.workspace_id ?? null;
-  const canWrite = useRequireRole("owner", "responder");
+  const canGenerateBrief = useCanGenerateBrief();
 
   const [incident, setIncident] = React.useState<IncidentOut | null>(null);
   const [brief, setBrief] = React.useState<BriefOut | null>(null);
@@ -105,7 +105,7 @@ export function IncidentDetail(): React.JSX.Element {
         title={incident.title}
         description={incident.raw_alert_text}
         actions={
-          canWrite ? (
+          canGenerateBrief ? (
             <Button onClick={generate} disabled={generating}>
               {generating ? "Generating…" : brief ? "Regenerate brief" : "Generate brief"}
             </Button>
@@ -136,7 +136,7 @@ export function IncidentDetail(): React.JSX.Element {
         <EmptyState
           title="No brief yet"
           description={
-            canWrite
+            canGenerateBrief
               ? "Generate one to see hypotheses, citations, and blast radius."
               : "Ask an owner or responder to generate one."
           }

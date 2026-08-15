@@ -10,7 +10,7 @@ from app.core.errors import ForbiddenError, NotFoundError, UnauthorizedError
 from app.core.security import decode_access_token
 from app.db.session import get_db as _get_db
 from app.models.user import User
-from app.models.workspace import WorkspaceMember, WorkspaceRole
+from app.models.workspace import Workspace, WorkspaceMember, WorkspaceRole
 
 get_db = _get_db
 
@@ -72,5 +72,36 @@ def require_role(
                 f"Role '{membership.role.value}' is not permitted to perform this action"
             )
         return membership
+
+    return _check
+
+
+def require_role_or_demo(
+    *roles: WorkspaceRole,
+) -> Callable[[WorkspaceMember, User, AsyncSession], Coroutine[Any, Any, WorkspaceMember]]:
+    """Same as `require_role`, plus an escape hatch for demo guests — scoped to the
+    demo workspace itself, not just the caller's account.
+
+    A demo guest is always a VIEWER of the demo workspace (Phase 2's
+    `create_demo_guest`), but nothing stops that same account from later joining a
+    real workspace via invite code, where it should be bound by that workspace's own
+    role like any other member. Checking `current_user.is_demo` alone would still
+    widen access there too, since the flag is permanent on the account rather than
+    scoped to a particular membership — so the carve-out only fires when the
+    workspace being accessed is itself the demo workspace.
+    """
+
+    async def _check(
+        membership: CurrentWorkspaceMember, current_user: CurrentUser, db: DbSession
+    ) -> WorkspaceMember:
+        if membership.role in roles:
+            return membership
+        if current_user.is_demo:
+            workspace = await db.get(Workspace, membership.workspace_id)
+            if workspace is not None and workspace.is_demo:
+                return membership
+        raise ForbiddenError(
+            f"Role '{membership.role.value}' is not permitted to perform this action"
+        )
 
     return _check

@@ -35,7 +35,6 @@ test.describe("Signup → Onboarding → Dashboard (F2, F3)", () => {
     await page.getByRole("button", { name: "Sign up" }).click();
 
     await expect(page).toHaveURL(/\/onboarding/);
-    await expect(page.getByRole("button", { name: "Coming in Phase 11" })).toBeDisabled();
 
     await page.getByRole("button", { name: "Start empty" }).click();
 
