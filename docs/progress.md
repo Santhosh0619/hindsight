@@ -964,11 +964,21 @@ highlighting gap described below.
 
 Full detail on all findings and design rationale: ADR 0010.
 
-## Phase 11 — Seed Corpus & Demo Mode — in-progress
+## Phase 11 — Seed Corpus & Demo Mode — done, PR open ([PR #12](https://github.com/Santhosh0619/hindsight/pull/12))
 
 Target checkpoint (Master-Prompt.md): `make seed` completes in under 5 minutes with
 no LLM key configured and produces byte-identical fixtures on regeneration; demo
 login is one click; all 8 precomputed briefs render.
+
+Verified live: `make seed` completes in ~18-33s across repeated fresh runs (well
+under budget), is idempotent (0 duplicate rows on rerun), and produces the documented
+counts every time. "Try the live demo" is a one-click login into a workspace already
+populated with the seeded corpus; all 8 precomputed briefs render with real
+hypotheses/citations/blast-radius, 6/8 with the exactly-correct top-1 retrieval match
+and the other 2 a genuine near-miss within the same failure family. A demo guest can
+generate new briefs against the real corpus, narrowly scoped to the demo workspace
+itself after a security fix caught independently in both the backend and frontend
+(see ADR 0011 §4).
 
 Branch `feat/seed-corpus-demo-mode`, created from `main` after Phase 10 merged.
 Docs (`docs/modules/phase-11-seed-corpus-demo-mode/{PRD,FRD,NFR}.md`) committed
@@ -1058,9 +1068,9 @@ slate.
 | 9. TEST-FE | done | `tsc --noEmit`, `eslint --max-warnings 0`, `prettier --check`, `vitest` (89/89), `vite build` all clean, run inside the `web` container |
 | 10. REVIEW-FE | **APPROVED** | First pass (`code-review` skill): 1 BLOCKING — `useCanGenerateBrief`/`DemoBanner` checked only the account-wide `user.is_demo`, not mirroring the backend's Step 7 fix that also requires the *viewed workspace* to be the demo workspace, so a demo guest who joined a real workspace would still see (and could click) write affordances the backend would then 403. Fixed (`5d34581`): backend `MembershipOut` gained `workspace_is_demo`, frontend hooks now require both conditions, with a real (non-mocked) regression test in `auth.test.tsx` that switches workspaces mid-test. Re-review confirmed the fix closes every reachable path (grepped all `is_demo`/`currentMembership` consumers) → 0 blocking, 1 WARNING (the scoping predicate was duplicated across two hooks — the exact shape of bug that caused the original gap). Extracted `useIsDemoWorkspace()` as the single source of truth (`33f6178`); full gates re-verified green (89/89 tests, build). |
 | 11. TEST-E2E | done | `e2e/tests/demo-mode.spec.ts` (3 tests): demo login lands in a workspace populated with the real seeded corpus (not empty-state) across Dashboard/Knowledge Base/Service Map; opening the precomputed connection_pool_exhaustion incident renders real hypotheses/citations/blast-radius/runbook with a "served from cache" badge; a demo guest generates a new brief end-to-end. `docker-compose.test.yml`'s `api-test`/`worker-test`/`web-test` images needed a one-time rebuild (stale since before `app/seed/` existed) before the stack's own conditional seed step could run. Verified twice: once incrementally, once after a full `down -v` + rebuild + fresh `up` — full suite (24 tests, 6 spec files) passes both times. Also fixed a rate-limiter test-isolation bug in the new spec itself (sequential X-Forwarded-For values collided with themselves across repeated manual reruns) before it ever landed. |
-| 12. PUSH | pending | |
-| 13. PR | pending | |
-| 14. MERGE | pending | |
+| 12. PUSH | done | `feat/seed-corpus-demo-mode` pushed; pre-push hook (ruff, mypy, pytest 168/168, tsc, eslint, prettier, vitest 89/89, build, all in Docker) passed |
+| 13. PR | done | [#12](https://github.com/Santhosh0619/hindsight/pull/12) opened against `main` |
+| 14. MERGE | pending | awaiting explicit go-ahead |
 
 ## Phase 12 — Evaluation Harness — pending
 ## Phase 13 — Observability, Settings, API Keys — pending
