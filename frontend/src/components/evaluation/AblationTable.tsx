@@ -38,9 +38,9 @@ export function AblationTable({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border text-left text-xs text-muted-foreground">
-            <th className="pb-2 font-medium">Configuration</th>
-            <th className="pb-2 font-medium">recall@1</th>
-            <th className="pb-2 font-medium">recall@5</th>
+            <th className="pb-2 pr-4 font-medium">Configuration</th>
+            <th className="pb-2 pr-4 font-medium">recall@1</th>
+            <th className="pb-2 pr-4 font-medium">recall@5</th>
             <th className="pb-2 font-medium">MRR</th>
           </tr>
         </thead>
@@ -49,7 +49,7 @@ export function AblationTable({
             const run = latest.get(mode);
             return (
               <tr key={mode} className="border-b border-border last:border-0">
-                <td className="py-2">
+                <td className="py-2 pr-4">
                   {run ? (
                     <button
                       type="button"
@@ -62,10 +62,12 @@ export function AblationTable({
                     MODE_LABELS[mode]
                   )}
                 </td>
-                <td className="py-2 tabular-nums">
+                <td className="py-2 pr-4 tabular-nums">
                   {run ? formatPercent(run.recall_at_1) : "not yet run"}
                 </td>
-                <td className="py-2 tabular-nums">{run ? formatPercent(run.recall_at_5) : ""}</td>
+                <td className="py-2 pr-4 tabular-nums">
+                  {run ? formatPercent(run.recall_at_5) : ""}
+                </td>
                 <td className="py-2 tabular-nums">{run ? formatPercent(run.mrr) : ""}</td>
               </tr>
             );
