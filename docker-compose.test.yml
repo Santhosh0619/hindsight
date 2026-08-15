@@ -42,6 +42,9 @@ services:
              (python -c 'import app.seed.seed' 2>/dev/null &&
                 python -m app.seed.seed ||
                 echo 'app.seed.seed not present yet (Phase 11) -- skipping seed step') &&
+             (python -c 'import app.services.evaluation.cli' 2>/dev/null &&
+                python -m app.services.evaluation.cli --mode vector ||
+                echo 'evaluation CLI not present yet (Phase 12) -- skipping eval step') &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000"
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
