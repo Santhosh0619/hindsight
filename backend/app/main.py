@@ -7,13 +7,17 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from sqlalchemy import text
 
 from app.agents.build_graph import checkpointer_conn_string
+from app.api.v1.agent_runs import router as agent_runs_router
+from app.api.v1.apikeys import router as apikeys_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.catalog import router as catalog_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.evaluation import router as evaluation_router
 from app.api.v1.incidents import router as incidents_router
+from app.api.v1.ingest import router as ingest_router
 from app.api.v1.postmortems import router as postmortems_router
 from app.api.v1.search import router as search_router
+from app.api.v1.settings import router as settings_router
 from app.api.v1.workspaces import router as workspaces_router
 from app.core.config import get_settings
 from app.core.errors import AppError, app_error_handler
@@ -73,6 +77,10 @@ def create_app() -> FastAPI:
     app.include_router(search_router, prefix="/api/v1")
     app.include_router(dashboard_router, prefix="/api/v1")
     app.include_router(evaluation_router, prefix="/api/v1")
+    app.include_router(agent_runs_router, prefix="/api/v1")
+    app.include_router(apikeys_router, prefix="/api/v1")
+    app.include_router(settings_router, prefix="/api/v1")
+    app.include_router(ingest_router, prefix="/api/v1")
 
     @app.get("/health")
     async def health() -> dict[str, object]:

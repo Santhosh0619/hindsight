@@ -192,9 +192,18 @@ async def get_audit_log(
     db: DbSession,
     cursor: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
+    actor_user_id: Annotated[uuid.UUID | None, Query()] = None,
+    action: str | None = Query(default=None),
+    target_type: str | None = Query(default=None),
 ) -> CursorPage[AuditLogEntryOut]:
     rows, next_cursor = await workspace_service.list_audit_log(
-        db, workspace_id=workspace_id, cursor=cursor, limit=limit
+        db,
+        workspace_id=workspace_id,
+        cursor=cursor,
+        limit=limit,
+        actor_user_id=actor_user_id,
+        action=action,
+        target_type=target_type,
     )
     return CursorPage[AuditLogEntryOut](
         items=[AuditLogEntryOut.model_validate(entry) for entry in rows],
