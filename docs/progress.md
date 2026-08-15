@@ -1072,7 +1072,100 @@ slate.
 | 13. PR | done | [#12](https://github.com/Santhosh0619/hindsight/pull/12) opened against `main` |
 | 14. MERGE | pending | awaiting explicit go-ahead |
 
-## Phase 12 — Evaluation Harness — pending
+## Phase 12 — Evaluation Harness — done, PR pending
+
+Target checkpoint (Master-Prompt.md): `make eval MODE=full` produces numbers; all three
+modes produce a comparison table; the numbers are in the README.
+
+No real LLM key is configured this build session — same standing choice as every phase
+since Phase 6, so groundedness degrades honestly to `null` everywhere in this build,
+never a fabricated `0%`. Verified three ways: 25 new automated backend tests (up from
+185 going into this phase, including the one pre-existing documented flake — 7 in
+`test_evaluation_metrics.py`, 4 in `test_evaluation_runner.py`, 6 in
+`test_evaluation_api.py`, plus updated assertions elsewhere) run against the real dev
+Postgres and real ingested/embedded postmortems, no mocking of retrieval. 15 new
+frontend tests (`MetricCards`/`AblationTable`/`CaseResultsTable`/`EvalTrendChart`/
+`Evaluation` — 4/3/3/2/3) via `vitest`. **Also** verified live against the real dev
+stack: `make eval MODE=all` run against the real seeded demo corpus produced genuine
+measured numbers (recall@1=0.70, recall@5=0.95, mrr≈0.808, citation_validity=1.00,
+groundedness=null across all three modes — see the honest-tie finding below), and the
+F11 Evaluation page was walked through live in a real browser (Playwright MCP) against
+that same data: cards, trend chart (including its click-to-select interaction, verified
+via a raw DOM click since Playwright's synthetic click didn't reliably land on
+recharts' hover-repositioned dot), ablation table, and the case-results drill-down all
+render and interact correctly.
+
+| Step | Status | Notes |
+|---|---|---|
+| 1. BRANCH | done | `feat/evaluation-harness`, created from `main` after Phase 11 merged |
+| 2. READ | done | |
+| 3. EXPLORE | done | Reviewed Phase 7's `hybrid_search`/retrieval primitives, Phase 8's `citation_check.validate_citations`/`critic_agent.judge_verification`, Phase 1's already-scaffolded `eval_cases`/`eval_runs`/`eval_case_results` tables, and Phase 11's `seed.py`/`_precompute_brief` pattern before writing docs |
+| 4. DOCUMENT | done | `docs/modules/phase-12-evaluation-harness/{PRD,FRD,NFR}.md` committed before any code; PRD's acceptance criteria corrected mid-phase once real measurement showed the three ablation modes tie exactly (see below) |
+| 5. CODE-BE | done | `app/services/evaluation/{metrics,runner,cli}.py`, `app/services/evaluation_service.py`, `app/schemas/evaluation.py`, `app/api/v1/evaluation.py`; new Alembic revision `6e621b073457` (`eval_runs.mode`); exported two previously-private helpers from `app/services/retrieval/hybrid.py` for the runner to reuse |
+| 6. TEST-BE | done | `ruff`, `mypy --strict`, `pytest` (184/185 clean run — the 1 failure is the pre-existing documented flake `test_a_low_critic_score_triggers_exactly_one_retry`, unrelated to this diff, confirmed passing 3/3 in isolated reruns) |
+| 7. REVIEW-BE | **APPROVED** | First pass: 0 blocking / 1 WARNING (Markdown ablation table's column set didn't literally match the FRD's wording — the code was actually correct per plan.md §13's own README format; fixed the FRD instead) / 1 NOTE (no action needed) |
+| 8. CODE-FE | done | `pages/Evaluation.tsx`, `components/evaluation/{MetricCards,EvalTrendChart,AblationTable,CaseResultsTable}.tsx`, wired into `routes.tsx`/`screens.ts` |
+| 9. TEST-FE | done | `tsc --noEmit`, `eslint --max-warnings 0`, `prettier --check`, `vitest` (104/104), `vite build` all clean |
+| 10. REVIEW-FE | **APPROVED** | First pass: 2 BLOCKING (`AblationTable` only fell back to "not yet run" on the first of three columns; `EvalTrendChart` had no click-to-select at all) — see below. Fixed both, re-review confirmed independently → 1 WARNING (`MetricCards`' citation-validity card missing a null-explanation the FRD asked for "defensively") — fixed. A third pass confirmed → APPROVED, 0/0/0. |
+| 11. TEST-E2E | done | `e2e/tests/evaluation.spec.ts` (2 tests) against `docker-compose.test.yml`, rebuilt fresh (this stack's images don't bind-mount source, unlike the dev stack — see below) with a new startup step seeding one real `EvalRun`. Full suite 26/26 passing; also fixed one pre-existing unrelated flake in `demo-mode.spec.ts` caught incidentally (see below). |
+| 12. PUSH | pending | |
+| 13. PR | pending | |
+| 14. MERGE | pending | |
+
+### The honest finding: all three ablation modes tied exactly on the real corpus
+
+Running `make eval MODE=all` against the real 20-case golden set produced identical
+recall@1/recall@5/MRR for `vector`, `vector_bm25`, and `full` — not an assumption, a
+measured result that contradicted the PRD's original (unmeasured) acceptance criterion
+that the three modes "must" differ. Rather than force a more flattering table, verified
+the cause directly: `search_keyword`/`search_graph` return zero hits for all 20 real
+eval-case queries, because the eval-case alert text (Phase 11's own fixture) never
+literally names a service (graph's precondition) and never shares vocabulary with
+postmortem prose (BM25's precondition) — vector search alone already saturates at
+recall@5=0.95 on this corpus. Corrected the PRD's acceptance criteria to describe what
+was actually measured rather than what was assumed. Full writeup: ADR 0012 §3.
+
+### Two bugs found only by a live browser walkthrough (not by tsc/eslint/vitest alone)
+
+- **`AblationTable`'s "not yet run" fallback only covered the first of three columns**
+  for a mode with no run yet — recall@5 and MRR silently rendered blank. The
+  component's own test asserted 2 occurrences (one per missing mode), which is
+  numerically compatible with the bug (1 column × 2 modes) as much as with a correct
+  fix (3 columns × 2 modes = 6) — caught by the code-reviewer sub-agent reading the
+  FRD's literal wording against the code, not by the test. Fixed and the assertion
+  rewritten to assert 6, with a comment explaining why 2 wouldn't have caught it.
+- **`EvalTrendChart`'s click-to-select silently went nowhere.** A custom `dot` render
+  had the click handler, but recharts renders a separate `activeDot` element on top
+  during hover — the element actually under the cursor at click time — so the handler
+  never fired. Found only by testing live: Playwright's synthetic `.click()` didn't
+  reliably land on the hover-repositioned SVG element either, so this was confirmed by
+  dispatching a raw DOM click event directly and watching a genuinely different
+  `EvalRun` get fetched (network log + drill-down numbers changing). Fixed by wiring
+  the same clickable dot to both `dot` and `activeDot`. See ADR 0012 §4.
+
+### Infra bug found only by rebuilding the e2e stack
+
+- **`docker-compose.test.yml`'s `api-test`/`worker-test`/`web-test` don't bind-mount
+  source** (unlike the dev stack) — their code is baked into the image at build time.
+  Extending `api-test`'s startup command to also seed a real `EvalRun` was invisible
+  until an explicit `docker compose -f docker-compose.test.yml build api-test
+  worker-test web-test` picked up Phase 12's backend code at all; `up -d --wait` alone
+  reused a stale pre-Phase-12 image and silently skipped the new step. Same class of
+  gotcha as ADR 0010 §5 and ADR 0011's rebuild-before-`app.seed`-exists precedent. See
+  ADR 0012 §6.
+
+### An unrelated flake fixed incidentally while running the full e2e suite
+
+- **`demo-mode.spec.ts`'s `getByText("80")` occasionally matched a demo guest's own
+  randomly-generated email** (e.g. `guest-af9394f380d3@...`, which can contain "80" as
+  a substring) instead of the corpus-size stat tile — a pre-existing Phase 11 flake,
+  unrelated to this phase's own diff, caught only because the e2e-tester sub-agent's
+  full-suite run happened to hit the collision. Fixed with an exact-match locator;
+  confirmed with a 5×-repeat run (15/15) plus a full-suite re-run (26/26), both clean.
+
+Full detail on all findings and design rationale: ADR 0012.
+
+## Phase 13 — Observability, Settings, API Keys — pending
 ## Phase 13 — Observability, Settings, API Keys — pending
 ## Phase 14 — Hardening — pending
 ## Phase 15 — Tests — pending
