@@ -104,6 +104,46 @@ async def test_real_viewer_is_still_denied_incident_creation(
     assert response.status_code == 403
 
 
+async def test_demo_guest_is_denied_in_a_real_workspace_they_later_joined(
+    client: AsyncClient,
+) -> None:
+    # A demo guest's is_demo flag is permanent on the account, not scoped to the demo
+    # workspace -- require_role_or_demo must only carve out an exception when the
+    # workspace being accessed is itself the demo workspace, or a demo guest who
+    # joins a real workspace via invite code (then gets demoted like anyone else)
+    # would keep write access the owner thought they'd revoked.
+    owner = await signup(client)
+    owner_token = owner["access_token"]
+    real_workspace_id = await _workspace_id(client, owner_token)
+
+    guest = await _create_demo_guest(client)
+    guest_token = guest["access_token"]
+
+    invite = await client.post(
+        f"/api/v1/workspaces/{real_workspace_id}/members/invite-code",
+        headers=auth_headers(owner_token),
+    )
+    assert invite.status_code == 200, invite.text
+    join = await client.post(
+        "/api/v1/workspaces/join",
+        json={"code": invite.json()["code"]},
+        headers=auth_headers(guest_token),
+    )
+    assert join.status_code == 200, join.text
+
+    me = await client.get("/api/v1/auth/me", headers=auth_headers(guest_token))
+    guest_user_id = me.json()["user"]["id"]
+    async with get_session_factory()() as db:
+        await _demote_to_viewer(db, real_workspace_id, guest_user_id)
+
+    response = await client.post(
+        f"/api/v1/workspaces/{real_workspace_id}/incidents",
+        json={"title": "t", "raw_alert_text": "alert"},
+        headers=auth_headers(guest_token),
+    )
+    assert response.status_code == 403
+
+
 async def test_demo_brief_bucket_exhausts_after_capacity(client: AsyncClient) -> None:
     guest = await _create_demo_guest(client)
     token = guest["access_token"]
