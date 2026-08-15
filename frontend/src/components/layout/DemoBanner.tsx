@@ -1,9 +1,12 @@
 import { useAuth } from "@/lib/auth";
 
 export function DemoBanner(): React.JSX.Element | null {
-  const { user } = useAuth();
+  const { user, currentMembership } = useAuth();
 
-  if (!user?.is_demo) {
+  // Scoped to both the account and the workspace currently being viewed -- a demo
+  // guest who joins a real workspace via invite code must not see this workspace's
+  // real data mislabeled as synthetic.
+  if (!user?.is_demo || !currentMembership?.workspace_is_demo) {
     return null;
   }
 

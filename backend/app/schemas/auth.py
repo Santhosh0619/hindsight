@@ -35,6 +35,7 @@ class MembershipOut(BaseModel):
     workspace_id: uuid.UUID
     workspace_name: str
     workspace_slug: str
+    workspace_is_demo: bool
     role: WorkspaceRole
 
 

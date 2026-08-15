@@ -106,6 +106,7 @@ async def me(current_user: CurrentUser, db: DbSession) -> MeResponse:
                 workspace_id=workspace.id,
                 workspace_name=workspace.name,
                 workspace_slug=workspace.slug,
+                workspace_is_demo=workspace.is_demo,
                 role=role,
             )
             for workspace, role in memberships
