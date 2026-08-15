@@ -1072,7 +1072,7 @@ slate.
 | 13. PR | done | [#12](https://github.com/Santhosh0619/hindsight/pull/12) opened against `main` |
 | 14. MERGE | pending | awaiting explicit go-ahead |
 
-## Phase 12 — Evaluation Harness — done, PR pending
+## Phase 12 — Evaluation Harness — done, PR open ([PR #13](https://github.com/Santhosh0619/hindsight/pull/13))
 
 Target checkpoint (Master-Prompt.md): `make eval MODE=full` produces numbers; all three
 modes produce a comparison table; the numbers are in the README.
@@ -1108,9 +1108,9 @@ render and interact correctly.
 | 9. TEST-FE | done | `tsc --noEmit`, `eslint --max-warnings 0`, `prettier --check`, `vitest` (104/104), `vite build` all clean |
 | 10. REVIEW-FE | **APPROVED** | First pass: 2 BLOCKING (`AblationTable` only fell back to "not yet run" on the first of three columns; `EvalTrendChart` had no click-to-select at all) — see below. Fixed both, re-review confirmed independently → 1 WARNING (`MetricCards`' citation-validity card missing a null-explanation the FRD asked for "defensively") — fixed. A third pass confirmed → APPROVED, 0/0/0. |
 | 11. TEST-E2E | done | `e2e/tests/evaluation.spec.ts` (2 tests) against `docker-compose.test.yml`, rebuilt fresh (this stack's images don't bind-mount source, unlike the dev stack — see below) with a new startup step seeding one real `EvalRun`. Full suite 26/26 passing; also fixed one pre-existing unrelated flake in `demo-mode.spec.ts` caught incidentally (see below). |
-| 12. PUSH | pending | |
-| 13. PR | pending | |
-| 14. MERGE | pending | |
+| 12. PUSH | done | `feat/evaluation-harness` pushed; pre-push hook (ruff, mypy, pytest 185/185, tsc, eslint, prettier, vitest 104/104, build, all in Docker) passed |
+| 13. PR | done | [#13](https://github.com/Santhosh0619/hindsight/pull/13) opened against `main` |
+| 14. MERGE | pending | awaiting explicit go-ahead |
 
 ### The honest finding: all three ablation modes tied exactly on the real corpus
 
