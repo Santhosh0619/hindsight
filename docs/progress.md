@@ -964,7 +964,104 @@ highlighting gap described below.
 
 Full detail on all findings and design rationale: ADR 0010.
 
-## Phase 11 — Seed Corpus & Demo Mode — pending
+## Phase 11 — Seed Corpus & Demo Mode — in-progress
+
+Target checkpoint (Master-Prompt.md): `make seed` completes in under 5 minutes with
+no LLM key configured and produces byte-identical fixtures on regeneration; demo
+login is one click; all 8 precomputed briefs render.
+
+Branch `feat/seed-corpus-demo-mode`, created from `main` after Phase 10 merged.
+Docs (`docs/modules/phase-11-seed-corpus-demo-mode/{PRD,FRD,NFR}.md`) committed
+before any code (`80a5782`).
+
+### Design gaps resolved before/during implementation (see FRD for full text)
+
+1. **Two different "12-family" lists.** plan.md §12 names 12 specific *content*
+   scenarios (connection pool exhaustion, retry storm, cache stampede, poison
+   message, cert expiry, disk saturation, config rollout, dependency version drift,
+   clock skew, thread pool starvation, DNS failover, quota exhaustion) — a different
+   list from Phase 6's own 12-family *classification* taxonomy
+   (`FailureModeFamily` in `app/services/extraction/taxonomy.py`). Resolved with an
+   explicit `Scenario.family` mapping in `app/seed/scenarios.py` rather than
+   inventing a third taxonomy.
+2. **No LLM key, but Knowledge Base features need populated facts/links.** Since the
+   generator scripts author the postmortem content, they know its ground truth —
+   `generate_postmortems.py` emits facts/service-links/failure-modes directly as
+   part of each fixture entry; `seed.py` inserts them without ever invoking the real
+   (LLM-dependent) extraction agents. `llm_used`/`from_cache` stay accurate.
+3. **`PostmortemFact.source_chunk_id` is a real FK (ADR 0010 §3).** Postmortem
+   bodies are composed with the exact section headers `chunk.py`'s heading regex
+   recognizes, each kept under the 1200-char chunk-split threshold so section ↔
+   chunk is 1:1; `seed.py` looks up the real chunk by `section_label` after running
+   the real ingestion pipeline, so every fact's FK points at a real chunk.
+4. **"Precomputed" brief ≠ fabricated.** `retriever_node`/`correlator_node`
+   (Phase 8) are pure/deterministic — no LLM call ever. `seed.py` hand-builds a
+   minimal `TriageState` (skipping only the LLM-dependent `normalizer_node`) and
+   calls both real node functions directly against the real seeded, indexed corpus,
+   so `matched_postmortems` scores and `blast_radius` are genuinely computed. Only
+   hypothesis prose and runbook steps are hand-derived from the matched
+   postmortem's own facts, citing real chunk ids.
+5. **Demo guests are VIEWER (Phase 2) but need to generate new briefs.** Added
+   `require_role_or_demo` (`app/core/deps.py`) and an `OwnerOrResponderOrDemo`
+   alias used only on `POST /incidents`, `POST .../brief`, `GET .../brief/stream` —
+   every other role-gated endpoint untouched.
+6. **Demo brief generation needs its own rate limit**, distinct from
+   `demo_signup_bucket` (which only bounds new *session* creation per IP). Added
+   `demo_brief_bucket` (per-user, `capacity=10, refill_seconds=600`), checked in
+   `generate_brief`/`stream_brief` only when `current_user.is_demo`.
+7. **The seed workspace and the lazily-created demo workspace must be the same
+   row.** `seed.py` reuses `create_demo_guest`'s exact "find `Workspace.is_demo`,
+   else create" lookup — whichever runs first (an operator's `make seed`, or an
+   early demo visitor) creates the row the other then finds.
+
+### Verified against the real dev stack (not just lint/type-check)
+
+Ran `python -m app.seed.seed` (the exact command `make seed` invokes) against the
+real dev containers, starting from a demo workspace that already existed (created
+earlier by manual `create_demo_guest` testing) but had zero catalog/postmortem/
+incident rows — a genuine test of the get-or-create + populate path, not a clean
+slate.
+
+- Fresh run: 8 teams / 40 services / 57 edges / 80 postmortems / 484 chunks (6.05
+  avg/postmortem, all within the chunker's split threshold as designed) / 324 facts
+  / 80 `postmortem_services` / 80 `postmortem_failure_modes` (7 distinct families) /
+  12 incidents / 12 `incident_signals` / 8 briefs / 20 eval cases — every count
+  matches the fixtures exactly. Total wall time ~23s, well under the 5-minute
+  budget.
+- Idempotency: re-ran immediately after — every section logged
+  `created: 0, already_present: N`, 0 duplicate rows anywhere, completed in 0.1s.
+- Precomputed-brief quality: inspected all 8 briefs' top-ranked match by title. 6/8
+  have their top-1 match be the exact right scenario; the other 2 (connection pool
+  exhaustion, quota exhaustion) rank the correct scenario at #2/#5-6 with the #1
+  slot going to a closely related scenario in the same broad failure family
+  (capacity/resource exhaustion) — a genuine near-miss from real hybrid retrieval,
+  not a bug (`keyword_score=0.0` across the board is also expected and by design:
+  incident alert text deliberately uses different vocabulary than postmortem prose,
+  per `generate_incidents.py`'s own docstring, specifically to test semantic
+  retrieval rather than keyword overlap). Accepted as correct, non-cherry-picked
+  behavior consistent with gap #4 above — reshaping it to force 100% top-1 accuracy
+  would mean curating the output, which is exactly what gap #4 chose not to do.
+- Backend-wide `ruff check`/`mypy --strict` clean (102 source files); full existing
+  `pytest` suite (159 tests) still green with the RBAC/rate-limit change in place —
+  no regressions.
+
+| Step | Status | Notes |
+|---|---|---|
+| 1. BRANCH | done | `feat/seed-corpus-demo-mode` |
+| 2. READ | done | |
+| 3. EXPLORE | done | |
+| 4. DOCUMENT | done | `docs/modules/phase-11-seed-corpus-demo-mode/{PRD,FRD,NFR}.md`, committed (`80a5782`) before any code |
+| 5. CODE-BE | in-progress | Generators + fixtures done (`7cce11f`, `88ebbee`, `9ba7430`, `a2aaae9`), `seed.py` loader done and verified live (`f6c7ff1`), demo RBAC/rate-limit carve-out done (`a24cd15`). Remaining: none identified yet — Step 5 believed complete, formal re-check pending at Step 6/7. |
+| 6. TEST-BE | in-progress | `ruff`/`mypy --strict` clean, existing 159-test suite green. Still need: `test_seed.py` (asserts documented counts, fact→chunk FK correctness, SPOF verification, idempotency) and `test_demo_mode.py` (`require_role_or_demo` role matrix, `demo_brief_bucket` exhaustion) — not yet written. |
+| 7. REVIEW-BE | pending | |
+| 8. CODE-FE | pending | `DemoBanner.tsx`, `useCanGenerateBrief()` hook, wiring into `AppShell`/`NewIncident`/`IncidentDetail` |
+| 9. TEST-FE | pending | |
+| 10. REVIEW-FE | pending | |
+| 11. TEST-E2E | pending | New coverage against the seeded corpus specifically (demo login → populated Knowledge Base/Service Map/Dashboard, not empty-state; open a precomputed-brief incident; demo guest generates a new brief) |
+| 12. PUSH | pending | |
+| 13. PR | pending | |
+| 14. MERGE | pending | |
+
 ## Phase 12 — Evaluation Harness — pending
 ## Phase 13 — Observability, Settings, API Keys — pending
 ## Phase 14 — Hardening — pending
