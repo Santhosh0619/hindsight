@@ -36,7 +36,7 @@ per-seat billing) needs those properties.
 
 ## 3. Login and refresh failures are message-identical by construction
 
-**Context.** plan.md's interview-prep question set and this phase's own NFR both call
+**Context.** plan.md's own design-review notes and this phase's own NFR both call
 for no user-enumeration signal. It's easy to get this right in the code and wrong in
 the error *message* (e.g. "no such user" vs "wrong password" leaking through `detail`).
 

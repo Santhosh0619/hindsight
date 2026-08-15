@@ -25,7 +25,7 @@ This is a monorepo. The structure is:
 - `backend/` — FastAPI application (Python 3.11+)
 - `frontend/` — React JS web application (TypeScript, Vite, Tailwind)
 - `e2e/` — Playwright end-to-end tests
-- `docs/` — Architecture, decisions (ADRs), module docs, interview prep
+- `docs/` — Architecture, decisions (ADRs), module docs
 - `.claude/` — Skills, hooks, sub-agents (never commit cache/tmp/sessions)
 
 Frontend is React JS for web. If a mobile app is added later it is React Native in
@@ -101,7 +101,9 @@ again if you can't otherwise confirm a BLOCKING fix actually landed correctly.
 
 Write before moving to the next phase:
 1. `docs/decisions/NNNN-<slug>.md` — one ADR per non-obvious decision. Two paragraphs.
-2. Append to `docs/interview-prep.md` — Q&A for that phase's design choices.
+2. Append to `docs/design-notes.md` — Q&A for that phase's design choices. Local-only
+   (gitignored) — never commit or push this file, and never use it or its contents in
+   any commit message, PR title/body, code comment, or other repo-visible text.
 
 ## What Never to Do
 

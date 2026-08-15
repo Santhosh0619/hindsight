@@ -8,10 +8,9 @@ Module codes: B14 / F11 (from plan.md §6)
 Every retrieval and agent-pipeline claim made so far (Phases 6-11) has been verified by
 hand — a curl walkthrough, a live browser session, a manually-inspected precomputed
 brief. That proves the pipeline runs; it proves nothing about whether it finds the
-*right* prior postmortem, and it produces no number a README or an interview answer can
-cite. plan.md §13 is explicit that reporting real recall/MRR/groundedness numbers is
-"the section that separates you from every other candidate" — almost no portfolio RAG
-project does this. This module builds the harness that produces those numbers, against
+*right* prior postmortem, and it produces no number a README can cite. plan.md §13 is
+explicit that reporting real recall/MRR/groundedness numbers is what meaningfully sets
+this apart — almost no portfolio RAG project does this. This module builds the harness that produces those numbers, against
 the 20 golden eval cases Phase 11 already seeded, and makes the three-way ablation
 (vector / vector+BM25 / vector+BM25+graph) a repeatable, first-class command rather than
 a one-off script.

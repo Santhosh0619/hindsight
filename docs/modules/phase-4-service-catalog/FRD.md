@@ -151,7 +151,7 @@ edge_weight(criticality) * tier_weight(reached_service.tier) / depth`, where
 `edge_weight(hard) = 1.0`, `edge_weight(soft) = 0.4`, and `tier_weight` favors lower
 (more critical) tiers. The exact weights are a documented, tunable constant set in
 `postgres_graph_store.py`, not hardcoded inline — see the ADR for the full rationale
-and the annotated SQL (plan.md's explicit interview-question-2 callout).
+and the annotated SQL (plan.md's own callout on this exact design choice).
 
 ### `app/services/catalog_service.py`
 
