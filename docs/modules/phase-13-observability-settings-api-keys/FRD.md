@@ -131,9 +131,28 @@
 ## Data Model Changes
 
 No new tables — `agent_runs`, `agent_run_steps`, `api_keys`, `audit_log` all already
-exist from Phase 1's initial migration, unused or under-used until now. No column
-additions either: `agent_run_steps.tokens_in`/`tokens_out` already exist, simply never
-populated with a real value before this phase (see Internal Architecture).
+exist from Phase 1's initial migration, unused or under-used until now.
+`agent_run_steps.tokens_in`/`tokens_out` already exist too, simply never populated
+with a real value before this phase (see Internal Architecture).
+
+One additive column found necessary while implementing FR-02: `agent_runs.brief_id`
+(nullable, FK to `briefs.id`, `ON DELETE SET NULL`). Nothing in the pre-existing
+schema recorded which `Brief` row a given `AgentRun` actually produced — an incident
+can have several `AgentRun`/`Brief` rows across regenerations, with no FK between
+them, so "was this run's brief served from cache" (needed for FR-02's `from_cache`
+field and FR-03's `cache_hit_rate`) had no reliable way to resolve per run without it.
+Set once, in `_finish_agent_run`, from the `brief_id` the graph's own "done" event
+already carries.
+
+While implementing FR-01/FR-02, found that `generate_brief`'s non-streaming path
+(`POST .../incidents/{id}/brief`, distinct from the SSE `/brief/stream` route) called
+`graph.ainvoke` directly instead of going through `stream_graph_events` — meaning a
+real, token-spending run generated through that endpoint never wrote any
+`AgentRunStep` rows at all, a pre-existing two-tier gap this phase's own promise (every
+real run gets real step data) can't leave in place. Fixed by routing `generate_brief`
+through `stream_graph_events` too, draining it for its `done`/`error` events instead of
+calling `ainvoke` — both entry points into brief generation now write identical
+step data by construction, not by two implementations kept in sync by hand.
 
 `GET /workspaces/{id}/audit-log` gains three optional query params (`actor_user_id`,
 `action`, `target_type`) translated into `WHERE` clauses in `workspace_service
@@ -151,10 +170,15 @@ signature, not a schema change.
   output_tokens` inside `.complete()` today and simply never returns it from
   `.structured()`; the new method returns both. `LLMRouter.structured_with_usage`
   mirrors `LLMRouter.structured`'s `_try_providers` plumbing.
-- `extract_signal`/`draft_brief`/`judge_verification` (`app/agents/
-  {normalizer_agent,analyst_agent,critic_agent}.py`) switch to the new method and
-  return `tuple[ResultType, LLMResponse]`. `normalizer_node`/`analyst_node`/
-  `critic_node` (`app/agents/nodes.py`) each include `step_tokens_in`/
+- `extract_signal`/`draft_brief` (`app/agents/{normalizer_agent,analyst_agent}.py`)
+  switch in place to the new method and return `tuple[ResultType, LLMResponse]`
+  — neither has a caller outside the live agent pipeline. `critic_agent.py` instead
+  gains a new sibling function, `judge_verification_with_usage`, alongside the
+  existing `judge_verification` left untouched — Phase 12's evaluation harness already
+  calls `judge_verification` expecting a bare `LLMVerificationJudgment` with no
+  per-node tracking need, so changing its signature would break a working, reviewed
+  module instead of extending it. `normalizer_node`/`analyst_node`/`critic_node`
+  (`app/agents/nodes.py`) each include `step_tokens_in`/
   `step_tokens_out` in their returned state-update dict — `0` on every path that never
   actually called an LLM this pass (cache hit, `llm_used=False`, LLM became
   unavailable mid-run), matching the honest-zero discipline the checkpoint's

@@ -1,5 +1,6 @@
 from app.schemas.incident import IncidentSignalOut
 from app.services.extraction.prompting import UNTRUSTED_DATA_NOTICE
+from app.services.llm.provider import LLMResponse
 from app.services.llm.router import LLMRouter
 
 _SYSTEM_PROMPT = (
@@ -12,6 +13,10 @@ _SYSTEM_PROMPT = (
 )
 
 
-async def extract_signal(router: LLMRouter, *, raw_text: str) -> IncidentSignalOut:
+async def extract_signal(
+    router: LLMRouter, *, raw_text: str
+) -> tuple[IncidentSignalOut, LLMResponse]:
     prompt = f'{UNTRUSTED_DATA_NOTICE}\n\n<chunk id="alert">\n{raw_text}\n</chunk>'
-    return await router.structured(prompt, system=_SYSTEM_PROMPT, result_type=IncidentSignalOut)
+    return await router.structured_with_usage(
+        prompt, system=_SYSTEM_PROMPT, result_type=IncidentSignalOut
+    )

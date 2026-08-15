@@ -11,7 +11,7 @@ from app.agents.build_graph import build_graph, checkpointer_conn_string
 from app.agents.state import initial_state
 from app.agents.streaming import stream_graph_events
 from app.core.config import get_settings
-from app.core.errors import NotFoundError
+from app.core.errors import LLMUnavailableError, NotFoundError
 from app.core.logging import get_logger
 from app.core.pagination import decode_cursor, encode_cursor
 from app.models.agent import AgentRun
@@ -170,9 +170,12 @@ async def _start_agent_run(db: AsyncSession, *, incident_id: uuid.UUID) -> Agent
     return run
 
 
-async def _finish_agent_run(db: AsyncSession, *, run: AgentRun, status: str) -> None:
+async def _finish_agent_run(
+    db: AsyncSession, *, run: AgentRun, status: str, brief_id: uuid.UUID | None = None
+) -> None:
     run.status = status
     run.finished_at = datetime.now(UTC)
+    run.brief_id = brief_id
     await db.commit()
 
 
@@ -185,6 +188,8 @@ async def generate_brief(
     start = time.monotonic()
 
     status = "done"
+    brief_id: uuid.UUID | None = None
+    graph_error: str | None = None
     try:
         conn_string = checkpointer_conn_string(settings)
         # Table/index setup runs once at app startup (main.py's lifespan), not here --
@@ -197,25 +202,42 @@ async def generate_brief(
                 workspace_id=incident.workspace_id,
                 raw_text=incident.raw_alert_text,
             )
-            final_state = await graph.ainvoke(
-                state, config={"configurable": {"thread_id": str(incident.id)}}
-            )
+            # Routed through stream_graph_events (not graph.ainvoke directly) so this
+            # non-streaming path writes real AgentRunStep rows exactly like
+            # stream_brief_generation does -- a run generated through this endpoint
+            # used to leave F12's waterfall empty despite being a real, token-spending
+            # run, the same class of two-tier gap ADR 0007 §1 already warns about
+            # sibling code paths drifting apart.
+            async for event in stream_graph_events(
+                graph, state, thread_id=str(incident.id), run_id=run.id
+            ):
+                if event.get("type") == "error":
+                    status = "error"
+                    graph_error = str(event.get("message") or "unknown error")
+                elif event.get("type") == "done":
+                    raw_brief_id = event.get("brief_id")
+                    if raw_brief_id:
+                        brief_id = uuid.UUID(str(raw_brief_id))
     except Exception:
         status = "error"
         raise
     finally:
-        await _finish_agent_run(db, run=run, status=status)
+        await _finish_agent_run(db, run=run, status=status, brief_id=brief_id)
 
-    brief = final_state["final"]
+    if brief_id is None:
+        raise LLMUnavailableError(
+            "Brief generation did not produce a brief", detail={"error": graph_error}
+        )
+
+    brief_row = await db.get(Brief, brief_id)
+    assert brief_row is not None
     logger.info(
         "brief_generation_completed",
         incident_id=str(incident.id),
-        llm_used=brief.llm_used,
-        correction_passes=brief.correction_passes,
+        llm_used=brief_row.llm_used,
+        correction_passes=brief_row.correction_passes,
         duration_ms=int((time.monotonic() - start) * 1000),
     )
-    brief_row = await db.get(Brief, brief.id)
-    assert brief_row is not None
     return await _enrich_brief(db, brief_row, workspace_id=incident.workspace_id)
 
 
@@ -227,6 +249,7 @@ async def stream_brief_generation(
     logger.info("brief_generation_started", incident_id=str(incident.id))
 
     status = "done"
+    brief_id: uuid.UUID | None = None
     try:
         conn_string = checkpointer_conn_string(settings)
         # Table/index setup runs once at app startup -- see generate_brief's comment.
@@ -242,12 +265,16 @@ async def stream_brief_generation(
             ):
                 if event.get("type") == "error":
                     status = "error"
+                elif event.get("type") == "done":
+                    raw_brief_id = event.get("brief_id")
+                    if raw_brief_id:
+                        brief_id = uuid.UUID(str(raw_brief_id))
                 yield event
     except Exception:
         status = "error"
         raise
     finally:
-        await _finish_agent_run(db, run=run, status=status)
+        await _finish_agent_run(db, run=run, status=status, brief_id=brief_id)
         logger.info("brief_generation_completed", incident_id=str(incident.id), status=status)
 
 

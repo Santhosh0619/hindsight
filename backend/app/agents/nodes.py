@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.analyst_agent import draft_brief, render_prompt
 from app.agents.citation_check import validate_citations
 from app.agents.correlator import score_candidates
-from app.agents.critic_agent import judge_verification
+from app.agents.critic_agent import judge_verification_with_usage
 from app.agents.normalizer_agent import extract_signal
 from app.agents.state import TraceEntry, TriageState
 from app.core.config import get_settings
@@ -61,8 +61,11 @@ async def normalizer_node(
     service_id_by_name = {service.name: service.id for service in services}
 
     llm_used = True
+    step_tokens_in = 0
+    step_tokens_out = 0
     try:
-        raw_signal = await extract_signal(router, raw_text=state["raw_text"])
+        raw_signal, usage = await extract_signal(router, raw_text=state["raw_text"])
+        step_tokens_in, step_tokens_out = usage.tokens_in, usage.tokens_out
     except LLMUnavailableError:
         llm_used = False
         raw_signal = IncidentSignalOut(
@@ -127,7 +130,13 @@ async def normalizer_node(
             else "no LLM available -- empty signal"
         ),
     )
-    return {"signal": signal, "llm_used": llm_used, "trace": [*state["trace"], trace]}
+    return {
+        "signal": signal,
+        "llm_used": llm_used,
+        "trace": [*state["trace"], trace],
+        "step_tokens_in": step_tokens_in,
+        "step_tokens_out": step_tokens_out,
+    }
 
 
 async def retriever_node(
@@ -219,7 +228,7 @@ async def analyst_node(
         return {"draft": draft, "trace": [*state["trace"], trace]}
 
     try:
-        draft = await draft_brief(router, prompt=prompt)
+        draft, usage = await draft_brief(router, prompt=prompt)
     except LLMUnavailableError:
         draft = DraftBrief(hypotheses=[], runbook_steps=[], citations=[])
         trace = TraceEntry(node="analyst", note="LLM became unavailable -- empty draft")
@@ -238,7 +247,12 @@ async def analyst_node(
     )
 
     trace = TraceEntry(node="analyst", note=f"{len(draft.hypotheses)} hypotheses drafted")
-    return {"draft": draft, "trace": [*state["trace"], trace]}
+    return {
+        "draft": draft,
+        "trace": [*state["trace"], trace],
+        "step_tokens_in": usage.tokens_in,
+        "step_tokens_out": usage.tokens_out,
+    }
 
 
 async def critic_node(state: TriageState, *, router: LLMRouter) -> dict[str, object]:
@@ -267,7 +281,9 @@ async def critic_node(state: TriageState, *, router: LLMRouter) -> dict[str, obj
         }
 
     try:
-        judgment = await judge_verification(router, signal=signal, draft=cleaned_draft)
+        judgment, usage = await judge_verification_with_usage(
+            router, signal=signal, draft=cleaned_draft
+        )
     except LLMUnavailableError:
         verification = VerificationResult(
             score=1.0,
@@ -303,6 +319,8 @@ async def critic_node(state: TriageState, *, router: LLMRouter) -> dict[str, obj
         "draft": cleaned_draft,
         "verification": verification,
         "trace": [*state["trace"], trace],
+        "step_tokens_in": usage.tokens_in,
+        "step_tokens_out": usage.tokens_out,
     }
 
 
