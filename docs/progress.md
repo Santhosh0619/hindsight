@@ -1165,7 +1165,7 @@ was actually measured rather than what was assumed. Full writeup: ADR 0012 §3.
 
 Full detail on all findings and design rationale: ADR 0012.
 
-## Phase 13 — Observability, Settings, API Keys — done, PR open ([PR #14](https://github.com/Santhosh0619/hindsight/pull/14))
+## Phase 13 — Observability, Settings, API Keys — merged ([PR #14](https://github.com/Santhosh0619/hindsight/pull/14), fix in [PR #15](https://github.com/Santhosh0619/hindsight/pull/15))
 
 Free-tier LLM keys are still unset this build session, so `POST .../settings/llm/test`
 correctly reports `gemini`/`groq` as `configured: false` and Ollama as reachable-or-not
@@ -1196,7 +1196,26 @@ sees all four.
 | 11. TEST-E2E | done | `e2e/tests/observability-settings-apikeys.spec.ts` (2 tests) + an extension to `rbac-shell.spec.ts` (1 test) against `docker-compose.test.yml`, rebuilt fresh (same baked-image gotcha as every prior phase — see below). Full suite 29/29 passing |
 | 12. PUSH | done | `feat/observability-settings-apikeys` pushed with `--no-verify` — every check the hook runs (ruff/mypy/pytest, tsc/eslint/prettier/vitest/build, full e2e) had already been run and confirmed green manually this session; re-running them serially inside the hook was pure redundancy the user asked to skip |
 | 13. PR | done | [#14](https://github.com/Santhosh0619/hindsight/pull/14) opened against `main` |
-| 14. MERGE | pending | awaiting explicit go-ahead |
+| 14. MERGE | done | merged to `main`; branch deleted locally and remotely. A follow-up fix (see below) was needed and merged separately as [#15](https://github.com/Santhosh0619/hindsight/pull/15) |
+
+### A CI-only test bug found after merge: the checkpointer schema didn't exist in a fresh database
+
+PR #14's own CI run failed on `Backend (ruff + mypy + pytest)` — 2 of 207 tests failed
+with `relation "checkpoints" does not exist`. `POST .../incidents/{id}/brief` now routes
+through the real LangGraph Postgres checkpointer (the fix described above), but the test
+client builds the FastAPI app directly over `ASGITransport` without running `main.py`'s
+lifespan startup, so nothing in the test session ever called `AsyncPostgresSaver.setup()`
+except `test_checkpointer.py`'s own explicit call — and `test_agent_runs_api.py` runs
+alphabetically before it. This passed locally purely by accident: the shared dev
+Postgres already had the checkpointer tables from earlier real app usage this session.
+Confirmed by reproducing the exact failure locally (dropped the checkpointer tables to
+simulate a fresh CI database, watched the same two tests fail), then fixed with a
+session-scoped autouse fixture in `conftest.py` that creates the schema once before any
+test runs — no longer dependent on file execution order. Since this repo has no branch
+protection requiring CI to pass before merge, PR #14 had already merged by the time this
+surfaced; the fix landed as a separate PR #15 rather than amending #14's already-merged
+history, verified green (all 10 checks, including a full E2E run) before considering the
+phase actually done.
 
 ### A real production gap found while wiring up `agent_runs.brief_id`
 
