@@ -373,3 +373,96 @@ export interface EvalCaseResultOut {
 export interface EvalRunDetailOut extends EvalRunOut {
   results: EvalCaseResultOut[];
 }
+
+// --- Members & Audit Log (Phase 2 backend, Phase 13 frontend) ---
+
+export interface MemberOut {
+  user_id: string;
+  email: string;
+  full_name: string;
+  role: WorkspaceRole;
+  joined_at: string;
+}
+
+export interface InviteCodeOut {
+  code: string;
+}
+
+export interface AuditLogEntryOut {
+  id: string;
+  actor_user_id: string | null;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  meta: Record<string, unknown>;
+  created_at: string;
+}
+
+// --- API Keys (Phase 13) ---
+
+export interface ApiKeyOut {
+  id: string;
+  name: string;
+  prefix: string;
+  created_by: string | null;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+export interface ApiKeyCreatedOut {
+  id: string;
+  name: string;
+  prefix: string;
+  raw_key: string;
+  created_at: string;
+}
+
+// --- Agent Runs (Phase 13) ---
+
+export interface AgentRunOut {
+  id: string;
+  incident_id: string;
+  incident_title: string;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+  total_tokens_in: number;
+  total_tokens_out: number;
+  from_cache: boolean;
+}
+
+export interface AgentRunStepOut {
+  id: string;
+  seq: number;
+  node_name: string;
+  status: string;
+  latency_ms: number | null;
+  tokens_in: number;
+  tokens_out: number;
+  output_summary: Record<string, unknown>;
+  error: string | null;
+}
+
+export interface AgentRunDetailOut extends AgentRunOut {
+  steps: AgentRunStepOut[];
+}
+
+export interface AgentRunStatsOut {
+  total_runs: number;
+  total_tokens_in: number;
+  total_tokens_out: number;
+  cache_hit_rate: number | null;
+}
+
+// --- Settings / LLM provider test (Phase 13) ---
+
+export type LLMProviderName = "gemini" | "groq" | "ollama";
+
+export interface LLMProviderTestOut {
+  provider: LLMProviderName;
+  configured: boolean;
+  ok: boolean | null;
+  latency_ms: number | null;
+  error: string | null;
+}
