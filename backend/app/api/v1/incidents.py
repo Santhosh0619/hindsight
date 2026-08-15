@@ -7,11 +7,19 @@ from fastapi import APIRouter, Depends, Query, status
 from sse_starlette.sse import EventSourceResponse
 
 from app.core.config import get_settings
-from app.core.deps import CurrentUser, CurrentWorkspaceMember, DbSession, require_role
+from app.core.deps import (
+    CurrentUser,
+    CurrentWorkspaceMember,
+    DbSession,
+    require_role,
+    require_role_or_demo,
+)
+from app.core.errors import RateLimitedError
 from app.core.pagination import CursorPage
 from app.db.session import get_session_factory
 from app.models.incident import IncidentStatus
 from app.models.postmortem import Severity
+from app.models.user import User
 from app.models.workspace import WorkspaceRole
 from app.schemas.incident_api import (
     BriefFeedbackCreate,
@@ -24,19 +32,28 @@ from app.schemas.incident_api import (
 from app.services import incidents_service
 from app.services.llm.router import build_router
 from app.services.postgres_graph_store import PostgresGraphStore
+from app.services.rate_limit import demo_brief_bucket
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/incidents", tags=["incidents"])
 
 OwnerOrResponder = Annotated[
     object, Depends(require_role(WorkspaceRole.OWNER, WorkspaceRole.RESPONDER))
 ]
+OwnerOrResponderOrDemo = Annotated[
+    object, Depends(require_role_or_demo(WorkspaceRole.OWNER, WorkspaceRole.RESPONDER))
+]
+
+
+def _check_demo_brief_rate_limit(current_user: User) -> None:
+    if current_user.is_demo and not demo_brief_bucket.consume(str(current_user.id)):
+        raise RateLimitedError("Too many briefs generated — try again shortly")
 
 
 @router.post("", response_model=IncidentOut, status_code=status.HTTP_201_CREATED)
 async def create_incident(
     workspace_id: uuid.UUID,
     payload: IncidentCreate,
-    membership: OwnerOrResponder,
+    membership: OwnerOrResponderOrDemo,
     current_user: CurrentUser,
     db: DbSession,
 ) -> IncidentOut:
@@ -99,9 +116,11 @@ async def update_incident(
 async def generate_brief(
     workspace_id: uuid.UUID,
     incident_id: uuid.UUID,
-    membership: OwnerOrResponder,
+    membership: OwnerOrResponderOrDemo,
+    current_user: CurrentUser,
     db: DbSession,
 ) -> BriefOut:
+    _check_demo_brief_rate_limit(current_user)
     incident = await incidents_service.get_incident(db, workspace_id, incident_id)
     graph_store = PostgresGraphStore(db)
     router_ = build_router(get_settings())
@@ -112,9 +131,11 @@ async def generate_brief(
 async def stream_brief(
     workspace_id: uuid.UUID,
     incident_id: uuid.UUID,
-    membership: OwnerOrResponder,
+    membership: OwnerOrResponderOrDemo,
+    current_user: CurrentUser,
     db: DbSession,
 ) -> EventSourceResponse:
+    _check_demo_brief_rate_limit(current_user)
     # `db` (FastAPI's request-scoped session) is closed by the dependency's own
     # AsyncExitStack as soon as this handler returns the response object -- before
     # Starlette ever starts iterating the SSE body. The generator below must own a

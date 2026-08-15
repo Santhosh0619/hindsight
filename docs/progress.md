@@ -964,7 +964,114 @@ highlighting gap described below.
 
 Full detail on all findings and design rationale: ADR 0010.
 
-## Phase 11 — Seed Corpus & Demo Mode — pending
+## Phase 11 — Seed Corpus & Demo Mode — done, PR open ([PR #12](https://github.com/Santhosh0619/hindsight/pull/12))
+
+Target checkpoint (Master-Prompt.md): `make seed` completes in under 5 minutes with
+no LLM key configured and produces byte-identical fixtures on regeneration; demo
+login is one click; all 8 precomputed briefs render.
+
+Verified live: `make seed` completes in ~18-33s across repeated fresh runs (well
+under budget), is idempotent (0 duplicate rows on rerun), and produces the documented
+counts every time. "Try the live demo" is a one-click login into a workspace already
+populated with the seeded corpus; all 8 precomputed briefs render with real
+hypotheses/citations/blast-radius, 6/8 with the exactly-correct top-1 retrieval match
+and the other 2 a genuine near-miss within the same failure family. A demo guest can
+generate new briefs against the real corpus, narrowly scoped to the demo workspace
+itself after a security fix caught independently in both the backend and frontend
+(see ADR 0011 §4).
+
+Branch `feat/seed-corpus-demo-mode`, created from `main` after Phase 10 merged.
+Docs (`docs/modules/phase-11-seed-corpus-demo-mode/{PRD,FRD,NFR}.md`) committed
+before any code (`80a5782`).
+
+### Design gaps resolved before/during implementation (see FRD for full text)
+
+1. **Two different "12-family" lists.** plan.md §12 names 12 specific *content*
+   scenarios (connection pool exhaustion, retry storm, cache stampede, poison
+   message, cert expiry, disk saturation, config rollout, dependency version drift,
+   clock skew, thread pool starvation, DNS failover, quota exhaustion) — a different
+   list from Phase 6's own 12-family *classification* taxonomy
+   (`FailureModeFamily` in `app/services/extraction/taxonomy.py`). Resolved with an
+   explicit `Scenario.family` mapping in `app/seed/scenarios.py` rather than
+   inventing a third taxonomy.
+2. **No LLM key, but Knowledge Base features need populated facts/links.** Since the
+   generator scripts author the postmortem content, they know its ground truth —
+   `generate_postmortems.py` emits facts/service-links/failure-modes directly as
+   part of each fixture entry; `seed.py` inserts them without ever invoking the real
+   (LLM-dependent) extraction agents. `llm_used`/`from_cache` stay accurate.
+3. **`PostmortemFact.source_chunk_id` is a real FK (ADR 0010 §3).** Postmortem
+   bodies are composed with the exact section headers `chunk.py`'s heading regex
+   recognizes, each kept under the 1200-char chunk-split threshold so section ↔
+   chunk is 1:1; `seed.py` looks up the real chunk by `section_label` after running
+   the real ingestion pipeline, so every fact's FK points at a real chunk.
+4. **"Precomputed" brief ≠ fabricated.** `retriever_node`/`correlator_node`
+   (Phase 8) are pure/deterministic — no LLM call ever. `seed.py` hand-builds a
+   minimal `TriageState` (skipping only the LLM-dependent `normalizer_node`) and
+   calls both real node functions directly against the real seeded, indexed corpus,
+   so `matched_postmortems` scores and `blast_radius` are genuinely computed. Only
+   hypothesis prose and runbook steps are hand-derived from the matched
+   postmortem's own facts, citing real chunk ids.
+5. **Demo guests are VIEWER (Phase 2) but need to generate new briefs.** Added
+   `require_role_or_demo` (`app/core/deps.py`) and an `OwnerOrResponderOrDemo`
+   alias used only on `POST /incidents`, `POST .../brief`, `GET .../brief/stream` —
+   every other role-gated endpoint untouched.
+6. **Demo brief generation needs its own rate limit**, distinct from
+   `demo_signup_bucket` (which only bounds new *session* creation per IP). Added
+   `demo_brief_bucket` (per-user, `capacity=10, refill_seconds=600`), checked in
+   `generate_brief`/`stream_brief` only when `current_user.is_demo`.
+7. **The seed workspace and the lazily-created demo workspace must be the same
+   row.** `seed.py` reuses `create_demo_guest`'s exact "find `Workspace.is_demo`,
+   else create" lookup — whichever runs first (an operator's `make seed`, or an
+   early demo visitor) creates the row the other then finds.
+
+### Verified against the real dev stack (not just lint/type-check)
+
+Ran `python -m app.seed.seed` (the exact command `make seed` invokes) against the
+real dev containers, starting from a demo workspace that already existed (created
+earlier by manual `create_demo_guest` testing) but had zero catalog/postmortem/
+incident rows — a genuine test of the get-or-create + populate path, not a clean
+slate.
+
+- Fresh run: 8 teams / 40 services / 57 edges / 80 postmortems / 484 chunks (6.05
+  avg/postmortem, all within the chunker's split threshold as designed) / 324 facts
+  / 80 `postmortem_services` / 80 `postmortem_failure_modes` (7 distinct families) /
+  12 incidents / 12 `incident_signals` / 8 briefs / 20 eval cases — every count
+  matches the fixtures exactly. Total wall time ~23s, well under the 5-minute
+  budget.
+- Idempotency: re-ran immediately after — every section logged
+  `created: 0, already_present: N`, 0 duplicate rows anywhere, completed in 0.1s.
+- Precomputed-brief quality: inspected all 8 briefs' top-ranked match by title. 6/8
+  have their top-1 match be the exact right scenario; the other 2 (connection pool
+  exhaustion, quota exhaustion) rank the correct scenario at #2/#5-6 with the #1
+  slot going to a closely related scenario in the same broad failure family
+  (capacity/resource exhaustion) — a genuine near-miss from real hybrid retrieval,
+  not a bug (`keyword_score=0.0` across the board is also expected and by design:
+  incident alert text deliberately uses different vocabulary than postmortem prose,
+  per `generate_incidents.py`'s own docstring, specifically to test semantic
+  retrieval rather than keyword overlap). Accepted as correct, non-cherry-picked
+  behavior consistent with gap #4 above — reshaping it to force 100% top-1 accuracy
+  would mean curating the output, which is exactly what gap #4 chose not to do.
+- Backend-wide `ruff check`/`mypy --strict` clean (102 source files); full existing
+  `pytest` suite (159 tests) still green with the RBAC/rate-limit change in place —
+  no regressions.
+
+| Step | Status | Notes |
+|---|---|---|
+| 1. BRANCH | done | `feat/seed-corpus-demo-mode` |
+| 2. READ | done | |
+| 3. EXPLORE | done | |
+| 4. DOCUMENT | done | `docs/modules/phase-11-seed-corpus-demo-mode/{PRD,FRD,NFR}.md`, committed (`80a5782`) before any code |
+| 5. CODE-BE | done | Generators + fixtures (`7cce11f`, `88ebbee`, `9ba7430`, `a2aaae9`), `seed.py` loader (`f6c7ff1`), demo RBAC/rate-limit carve-out (`a24cd15`), review-driven fixes (`5dade2b`) |
+| 6. TEST-BE | done | `test_seed.py` (documented counts scoped by fixture identity, fact→chunk section match, SPOF verification, idempotency) + `test_demo_mode.py` (`require_role_or_demo` role matrix incl. a demo guest demoted in a *real* workspace, `demo_brief_bucket` exhaustion) — commits `19cce5f`, `1ce5e0d`. `ruff`/`mypy --strict` clean, full suite 168/168 |
+| 7. REVIEW-BE | **APPROVED** | First pass (`code-review` skill): 1 BLOCKING (security — `require_role_or_demo` checked `current_user.is_demo` globally, not scoped to the demo workspace, so a demo guest who joined a *real* workspace via invite code and was later demoted kept write access there) + 3 correctness/robustness findings — `seed.py`'s per-entry commits weren't atomic (a crash mid-entry left a permanently-incomplete row a rerun would treat as done), `generate_postmortems.py` could emit literal duplicate titles when a scenario's candidate pool was smaller than its count (corrupting the title-keyed idempotency dedup on a resumed run), and `test_seed.py`'s count assertions were only pollution-safe for 2 of 7 fields. All fixed (`5dade2b`); demo workspace reset and reseeded from scratch on the fixed fixture, byte-identical regeneration confirmed, full suite re-verified green. Re-review confirmed all four fixes independently (traced callees, re-derived the title-uniqueness and byte-identical claims rather than trusting the commit message) → 0 blocking / 0 confirmed issues, 1 WARNING (missing regression test for the exact privilege-escalation scenario fix #1 closed) — added (`1ce5e0d`). |
+| 8. CODE-FE | done | `DemoBanner.tsx`, `useCanGenerateBrief()`/`useIsDemoWorkspace()` hooks, wired into `AppShell`/`NewIncident`/`IncidentDetail` (`2560d74`), plus a backend `MembershipOut.workspace_is_demo` field the fix in Step 10 needed (`5d34581`) |
+| 9. TEST-FE | done | `tsc --noEmit`, `eslint --max-warnings 0`, `prettier --check`, `vitest` (89/89), `vite build` all clean, run inside the `web` container |
+| 10. REVIEW-FE | **APPROVED** | First pass (`code-review` skill): 1 BLOCKING — `useCanGenerateBrief`/`DemoBanner` checked only the account-wide `user.is_demo`, not mirroring the backend's Step 7 fix that also requires the *viewed workspace* to be the demo workspace, so a demo guest who joined a real workspace would still see (and could click) write affordances the backend would then 403. Fixed (`5d34581`): backend `MembershipOut` gained `workspace_is_demo`, frontend hooks now require both conditions, with a real (non-mocked) regression test in `auth.test.tsx` that switches workspaces mid-test. Re-review confirmed the fix closes every reachable path (grepped all `is_demo`/`currentMembership` consumers) → 0 blocking, 1 WARNING (the scoping predicate was duplicated across two hooks — the exact shape of bug that caused the original gap). Extracted `useIsDemoWorkspace()` as the single source of truth (`33f6178`); full gates re-verified green (89/89 tests, build). |
+| 11. TEST-E2E | done | `e2e/tests/demo-mode.spec.ts` (3 tests): demo login lands in a workspace populated with the real seeded corpus (not empty-state) across Dashboard/Knowledge Base/Service Map; opening the precomputed connection_pool_exhaustion incident renders real hypotheses/citations/blast-radius/runbook with a "served from cache" badge; a demo guest generates a new brief end-to-end. `docker-compose.test.yml`'s `api-test`/`worker-test`/`web-test` images needed a one-time rebuild (stale since before `app/seed/` existed) before the stack's own conditional seed step could run. Verified twice: once incrementally, once after a full `down -v` + rebuild + fresh `up` — full suite (24 tests, 6 spec files) passes both times. Also fixed a rate-limiter test-isolation bug in the new spec itself (sequential X-Forwarded-For values collided with themselves across repeated manual reruns) before it ever landed. |
+| 12. PUSH | done | `feat/seed-corpus-demo-mode` pushed; pre-push hook (ruff, mypy, pytest 168/168, tsc, eslint, prettier, vitest 89/89, build, all in Docker) passed |
+| 13. PR | done | [#12](https://github.com/Santhosh0619/hindsight/pull/12) opened against `main` |
+| 14. MERGE | pending | awaiting explicit go-ahead |
+
 ## Phase 12 — Evaluation Harness — pending
 ## Phase 13 — Observability, Settings, API Keys — pending
 ## Phase 14 — Hardening — pending

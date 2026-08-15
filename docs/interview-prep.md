@@ -781,3 +781,101 @@ inconsistency-between-similar-things that's hard to catch by rereading your own 
 you already know what you meant, so a gap reads as intentional. A second pass with
 fresh eyes caught it immediately by comparing the three pages against each other, not
 against some abstract checklist.
+
+## Phase 11 — Seed Corpus & Demo Mode
+
+**Q: Walk me through how you populated the Knowledge Base features without a
+configured LLM key.**
+
+A: The honest starting point is that facts, service links, and failure-mode tags
+normally only get populated by the real extraction agents from Phase 6, and those need
+an LLM. But the seed corpus isn't a real incident report someone's asking the system to
+understand for the first time — it's a corpus I'm generating myself, which means I
+already know its ground truth as a direct byproduct of writing it. So the generator
+script that writes each postmortem's body also writes its facts, its affected service,
+and its failure-mode label as explicit fields on the same fixture entry, and the loader
+inserts those directly instead of routing through extraction. The thing I was careful
+about was not letting that shortcut lie about itself — `llm_used` and `from_cache` stay
+accurate on every row, so nothing downstream can mistake this for a real extraction run
+that happened to succeed.
+
+**Q: You call 8 of the demo incidents' briefs "precomputed." Are they real or faked?**
+
+A: Real, and that distinction mattered enough that I built the loader around it. Two of
+the six agent-pipeline nodes — retriever and correlator — are pure and deterministic,
+no LLM call in either, which I already knew from Phase 8. That means I can call them
+directly outside the full graph, against the real seeded and indexed corpus, and get
+back genuinely computed retrieval scores and blast radius — not a script's guess at
+what plausible output would look like. I checked this wasn't just true in theory:
+I pulled up all 8 briefs' top-ranked match afterward and six of them land on exactly
+the right scenario; the other two rank the correct one second or fifth, just behind a
+closely related scenario in the same broad failure family. That's what real hybrid
+retrieval actually looks like — not perfect, occasionally a sensible near-miss — and I
+left it that way rather than reshaping the corpus until every brief looked flawless,
+because that would have meant curating the output instead of computing it. The only
+parts that are hand-derived are the hypothesis sentence and runbook step, which is
+exactly the part a real LLM would be authoring — and even those cite real chunk ids
+that would pass the same grounding check a live citation gate enforces.
+
+**Q: Tell me about a bug that showed up twice, in two different layers.**
+
+A: Demo guests are viewers by default but get a narrow carve-out to generate briefs, so
+I added that exception on the backend as `require_role_or_demo` and mirrored it on the
+frontend as a `useCanGenerateBrief` hook. Both versions checked one thing: is this
+account a demo guest. What I missed the first time is that `is_demo` is permanent on
+the account, not scoped to a particular workspace — and a demo guest can join a real
+workspace through an ordinary invite code, the same as anyone else. If the owner of
+that real workspace then demotes them to viewer, expecting that to actually restrict
+them, the unscoped check would still say yes, because it never asked *which* workspace
+was being accessed. Backend code review caught it first — I fixed it by also requiring
+the target workspace itself to be the demo workspace, and added a fetched-from-`db`
+check inside the dependency. Then a second, separate review pass on the frontend caught
+the identical bug shape in the two frontend consumers, which hadn't been fixed at all
+yet because the frontend didn't even have the data to make that check — `MembershipOut`
+had no workspace-level demo flag until I added one. What I took from that isn't just
+"remember to scope it" — it's that the same wrong assumption can hide in two places
+that don't share code, and fixing one doesn't fix the other. After the second fix, I
+also collapsed both frontend checks into one hook, specifically because having the
+predicate written out twice is what let the bug exist in two places instead of one in
+the first place.
+
+**Q: What's a bug that passed every test on a fresh run but would have failed silently
+on a second one?**
+
+A: The seed loader's idempotency works by checking whether a postmortem's title already
+exists before inserting it — if it does, the loader assumes that entry was already
+fully processed. My first version of the postmortem-seeding function spanned two
+separate commits per entry: one after ingesting the postmortem itself, a second after
+attaching its facts and service links. On a machine that never crashes mid-run, that's
+invisible. But if the process dies between those two commits — a container restart, an
+out-of-memory kill, anything — a rerun sees the title already present and skips the
+whole entry, permanently, leaving a postmortem with no facts and no service link that
+nothing will ever flag as incomplete. My happy-path idempotency test — run it twice,
+assert the counts match — couldn't catch this, because it never actually induces a
+partial failure; it only proves the loader doesn't create duplicates, not that it
+recovers correctly from an interruption. Code review caught it by reasoning through the
+failure window directly rather than trusting the test. The fix was to make each fixture
+entry atomic — one commit covering everything that entry produces — so a crash rolls
+back the whole entry instead of leaving a half-written one a rerun would trust.
+
+**Q: Describe a bug in your own data generator that your first test run couldn't have
+caught.**
+
+A: The postmortem generator picks a service for each entry by cycling through a
+scenario's role-matched services with modulo indexing. That's fine as long as a
+scenario's postmortem count doesn't exceed how many services fit its role — but a
+couple of scenarios do exceed it (one had only three candidate services for seven
+postmortems), so the same service gets reused, and since the title is built only from
+the scenario and the service name, two distinct postmortems ended up with the exact
+same title. On a completely fresh database this never shows up, because the loader's
+existence check starts from an empty set — both rows insert fine regardless of the
+collision. It only bites on a *resumed* run, exactly the scenario the idempotency
+feature exists for: the loader builds a title-to-id lookup from what's already in the
+database, and two rows sharing a title collapse down to one id, quietly feeding the
+wrong postmortem id into any incident or eval case created in that same resumed run. I
+found it during code review, not by running anything — the review traced how the
+candidate-pool size compared to each scenario's postmortem count and spotted the
+arithmetic. Fixed by making the title generator track how many times each
+(scenario, service) pair has recurred and appending a disambiguating suffix past the
+first occurrence, then regenerated the fixture and confirmed all 80 titles are unique
+and the regeneration is still byte-identical run to run.

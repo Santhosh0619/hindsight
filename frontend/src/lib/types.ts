@@ -15,6 +15,7 @@ export interface MembershipOut {
   workspace_id: string;
   workspace_name: string;
   workspace_slug: string;
+  workspace_is_demo: boolean;
   role: WorkspaceRole;
 }
 
