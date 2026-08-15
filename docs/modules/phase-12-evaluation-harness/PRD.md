@@ -94,8 +94,10 @@ aggregate score.
   configured, producing three `EvalRun` rows (one per mode) with populated
   recall@1/recall@5/mrr/citation_validity and `groundedness=None`, and prints a
   Markdown ablation table.
-- The three modes produce visibly different recall/MRR numbers on the real 20-case
-  corpus (not identical placeholders), demonstrating retrieval mode genuinely changes
-  results.
+- The three modes are measured independently against the real 20-case corpus and
+  genuinely reflect what each retriever contributes — including reporting honestly if
+  two modes tie, rather than assuming ahead of time that they must differ. (They did
+  tie in this build: see ADR 0012 for why, and plan.md §13's own instruction to report
+  a negative ablation result honestly.)
 - F11 renders real data from the endpoints above against the real dev stack: cards,
   trend chart, ablation table, and a drill-down that surfaces failing cases first.
