@@ -879,3 +879,85 @@ arithmetic. Fixed by making the title generator track how many times each
 (scenario, service) pair has recurred and appending a disambiguating suffix past the
 first occurrence, then regenerated the fixture and confirmed all 80 titles are unique
 and the regeneration is still byte-identical run to run.
+
+## Phase 12 — Evaluation Harness
+
+**Q: Your ablation table — what did graph retrieval actually add, and why?**
+
+A: On the real 20-case golden set, nothing — vector, vector+BM25, and vector+BM25+graph
+came back with identical numbers to three decimal places (recall@1=0.70,
+recall@5=0.95, MRR≈0.808). My first instinct was to worry that meant a bug in how I'd
+composed the three ablation modes, so before writing that down anywhere I went and
+tested the two extra retrievers directly against every one of the 20 real eval-case
+queries: keyword search and graph search both returned zero hits, for all 20, every
+time. So the tie is real, and the reason traces back to how the eval-case alert text
+itself was written back in Phase 11 — short, vague phrases like "checkout is throwing
+500s, database looks maxed out" that deliberately never literally name a service (which
+is what my graph retriever needs to even start — it matches service names as literal
+substrings of the query) and deliberately use different vocabulary than the postmortem
+prose they're supposed to match (which is what BM25 needs). Vector search alone already
+gets to recall@5=0.95 on this corpus, so neither of the other two retrievers gets a
+chance to add anything. I could have reshaped the eval cases to manufacture separation
+between the three modes, but that would mean curating the test to produce a nicer-looking
+table instead of reporting what the system actually does — plan.md's own instructions
+say to report a negative ablation result honestly if that's what you get, and I think
+that's the more defensible answer in an interview too: I know exactly why the numbers
+tied, I checked it directly rather than assuming, and the answer says something real
+about this specific corpus rather than a generic claim about hybrid retrieval always
+helping.
+
+**Q: How do you measure citation validity without a configured LLM key?**
+
+A: The two "quality of a generated brief" metrics in this module are citation validity
+and groundedness, and Master-Prompt.md itself describes them differently — citation
+validity as "deterministic," groundedness as an "LLM judge." I built the harness to
+actually match that distinction instead of treating both the same way. For each eval
+case, I take the top-retrieved postmortem and derive a small draft brief straight from
+its own extracted facts — the root-cause fact becomes a hypothesis, the remediation fact
+becomes a runbook step, and each is cited to its real source chunk id. That's the exact
+same shape the seed corpus's own precomputed briefs use, from Phase 11 — I didn't invent
+a new pattern, I reused one that already existed for an almost identical reason. Then I
+run that draft through the same deterministic citation-validity check the live agent
+pipeline's critic node uses, unmodified — does the cited chunk exist, does its content
+plausibly support the claim. No LLM call anywhere in that path. Groundedness is the only
+metric in the module gated on whether a key is configured, and when it's not, it
+degrades to `null` per case and in the aggregate, which the CLI and the UI both show as
+a dash with an explanation, never a `0%` that would misrepresent an untested case as a
+failing one.
+
+**Q: Tell me about a bug your own unit tests passed but a live browser walkthrough
+caught.**
+
+A: The evaluation page has a small line chart showing recall@5 and MRR over past runs,
+and the FRD said clicking a point on that chart should do the same thing as clicking a
+row in the ablation table next to it — switch which run's details are shown below. I
+wired a click handler onto the chart's dot renderer, `tsc`/`eslint`/the build were all
+clean, and the component's own vitest tests passed, because those tests just query a
+rendered SVG circle directly and fire a synthetic click event on it — they don't
+simulate real hover-then-click browser behavior. When I actually clicked a point in a
+real browser, nothing happened. It took reading recharts' own source more than my code
+to find the reason: the library renders a second, separate dot element on top of the
+static one specifically for the currently-hovered point, and that's the element
+actually sitting under the cursor at the moment of a click. My handler was only on the
+static one, which was there but not reachable by a real pointer. The fix was one line —
+pass the same clickable dot to both the `dot` and `activeDot` props — but finding it
+required doing exactly what this project has done since Phase 3: treating a live
+walkthrough as a real verification step, not a formality after the automated checks
+already passed.
+
+**Q: Describe a test assertion that was numerically compatible with the bug it was
+supposed to catch.**
+
+A: The ablation table has three columns per retrieval mode — recall@1, recall@5, MRR —
+and the requirement was that any mode with no run yet shows "not yet run" in every one
+of them instead of a blank cell. My first implementation only applied that fallback to
+the first column; the other two silently rendered empty. The component's own test
+asserted there were exactly two occurrences of the text "not yet run" on the page — and
+that number is true for two missing modes whether the fallback covers one column or all
+three, so the test passed against the actual bug. A code reviewer catching it wasn't
+about running anything differently, it was about reading the FRD's literal sentence —
+"every cell," not "the configuration cell" — against what the code actually produced
+column by column. Once I fixed the component, I also rewrote the test to assert six
+occurrences, two modes times three columns, with a comment explaining specifically why
+two wouldn't have been enough — the number itself now encodes the requirement instead of
+just happening to match whatever the first draft produced.
