@@ -28,10 +28,11 @@ seed:
 	docker compose exec api python -m app.seed.seed
 
 # ── Evaluation ────────────────────────────────────────────────────────────────
-# Real implementation lands in Phase 12 (app.services.evaluation.cli); until then this
-# target exists so `make eval` fails with a clear message instead of "no rule to make".
+# MODE defaults to `all`, running the three-way ablation (vector / vector_bm25 / full)
+# and printing the README-ready comparison table; pass MODE=vector|vector_bm25|full to
+# run just one.
 eval:
-	docker compose exec api python -m app.services.evaluation.cli --mode $(or $(MODE),full)
+	docker compose exec api python -m app.services.evaluation.cli --mode $(or $(MODE),all)
 
 # ── Testing ───────────────────────────────────────────────────────────────────
 test: test-be test-fe test-e2e
