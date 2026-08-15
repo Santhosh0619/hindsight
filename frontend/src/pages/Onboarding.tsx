@@ -18,26 +18,13 @@ export function Onboarding(): React.JSX.Element {
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Card className="border-border/60 bg-card/70 backdrop-blur-md">
-            <CardHeader>
-              <CardTitle>Seed with demo data</CardTitle>
-              <CardDescription>
-                A synthetic catalog and postmortem archive to explore the product.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button disabled className="w-full" variant="outline">
-                Coming in Phase 11
-              </Button>
-            </CardContent>
-          </Card>
-
+        <div className="mx-auto w-full max-w-sm">
           <Card className="border-border/60 bg-card/70 backdrop-blur-md">
             <CardHeader>
               <CardTitle>Start empty</CardTitle>
               <CardDescription>
-                Bring your own service catalog and postmortems later.
+                Bring your own service catalog and postmortems later. Want to see the product
+                populated with data first? Try the live demo from the landing page instead.
               </CardDescription>
             </CardHeader>
             <CardContent>
