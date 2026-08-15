@@ -19,6 +19,32 @@ from app.db.session import dispose_engine, get_session_factory  # noqa: E402
 from app.main import create_app  # noqa: E402
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _setup_checkpointer_schema() -> None:
+    # The real app creates the LangGraph checkpointer's tables (checkpoints,
+    # checkpoint_writes, ...) in main.py's lifespan startup -- but the `client` fixture
+    # below builds the ASGI app directly over ASGITransport without triggering lifespan
+    # events, so nothing ever runs that setup during a test session. Any test whose
+    # request path touches AsyncPostgresSaver (e.g. POST .../brief, now that
+    # generate_brief routes through the real checkpointer) needs this schema to already
+    # exist, regardless of which test file happens to run first alphabetically -- doing
+    # it once here, before any test starts, replaces a fragile dependency on
+    # test_checkpointer.py's own setup() call running first.
+    import asyncio
+
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+    from app.agents.build_graph import checkpointer_conn_string
+    from app.core.config import get_settings
+
+    async def _setup() -> None:
+        conn_string = checkpointer_conn_string(get_settings())
+        async with AsyncPostgresSaver.from_conn_string(conn_string) as saver:
+            await saver.setup()
+
+    asyncio.run(_setup())
+
+
 @pytest.fixture(autouse=True)
 async def _reset_db_engine() -> AsyncGenerator[None, None]:
     # app.db.session caches the AsyncEngine/session factory at module scope, bound to
