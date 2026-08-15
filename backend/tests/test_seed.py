@@ -28,13 +28,26 @@ _EXPECTED_SECTION_BY_FACT_TYPE = {
 _SPOF_SERVICE_NAMES = ["session-service", "payment-gateway-adapter"]
 
 # The demo workspace is shared with test_demo_mode.py, which -- by exercising the
-# real feature end-to-end -- legitimately creates its own extra incidents/briefs in
-# it (a demo guest always joins this one workspace, by design). Counting seed.py's
-# own rows by the exact titles its fixtures declare, rather than raw table totals,
-# keeps this test correct regardless of what else has run against the same
-# workspace, in whatever order.
+# real feature end-to-end -- legitimately creates its own extra rows in it (a demo
+# guest always joins this one workspace, by design; today that's incidents/briefs,
+# but nothing rules out a future test doing the same to another table). Counting
+# every section by the exact identity seed.py's own idempotency check uses -- name
+# for teams/services/eval-cases, title for postmortems/incidents -- rather than raw
+# table totals, keeps this test correct regardless of what else has run against the
+# same workspace, in whatever order. Edges have no such identity of their own (only
+# `import_catalog` ever writes them, and nothing else in the suite touches this
+# workspace's catalog), so a raw count is safe there.
+_CATALOG_FIXTURE = json.loads((FIXTURES_DIR / "catalog.json").read_text())
+_SEEDED_TEAM_NAMES = [t["name"] for t in _CATALOG_FIXTURE["import"]["teams"]]
+_SEEDED_SERVICE_NAMES = [s["name"] for s in _CATALOG_FIXTURE["import"]["services"]]
+_SEEDED_POSTMORTEM_TITLES = [
+    entry["title"] for entry in json.loads((FIXTURES_DIR / "postmortems.json").read_text())
+]
 _SEEDED_INCIDENT_TITLES = [
     entry["title"] for entry in json.loads((FIXTURES_DIR / "incidents.json").read_text())
+]
+_SEEDED_EVAL_CASE_NAMES = [
+    entry["name"] for entry in json.loads((FIXTURES_DIR / "eval_cases.json").read_text())
 ]
 
 
@@ -44,16 +57,18 @@ async def _demo_workspace_id(db: AsyncSession) -> Any:
 
 
 async def _counts(db: AsyncSession, workspace_id: Any) -> dict[str, int]:
-    async def _count(model: Any) -> int:
+    async def _named_count(model: Any, name_column: Any, names: list[str]) -> int:
         result = await db.execute(
-            select(func.count()).select_from(model).where(model.workspace_id == workspace_id)
+            select(func.count())
+            .select_from(model)
+            .where(model.workspace_id == workspace_id, name_column.in_(names))
         )
         return result.scalar_one()
 
-    seeded_incidents_result = await db.execute(
+    edges_result = await db.execute(
         select(func.count())
-        .select_from(Incident)
-        .where(Incident.workspace_id == workspace_id, Incident.title.in_(_SEEDED_INCIDENT_TITLES))
+        .select_from(ServiceEdge)
+        .where(ServiceEdge.workspace_id == workspace_id)
     )
     seeded_briefs_result = await db.execute(
         select(func.count())
@@ -66,12 +81,12 @@ async def _counts(db: AsyncSession, workspace_id: Any) -> dict[str, int]:
         )
     )
     return {
-        "teams": await _count(Team),
-        "services": await _count(Service),
-        "edges": await _count(ServiceEdge),
-        "postmortems": await _count(Postmortem),
-        "eval_cases": await _count(EvalCase),
-        "seeded_incidents": seeded_incidents_result.scalar_one(),
+        "teams": await _named_count(Team, Team.name, _SEEDED_TEAM_NAMES),
+        "services": await _named_count(Service, Service.name, _SEEDED_SERVICE_NAMES),
+        "edges": edges_result.scalar_one(),
+        "postmortems": await _named_count(Postmortem, Postmortem.title, _SEEDED_POSTMORTEM_TITLES),
+        "eval_cases": await _named_count(EvalCase, EvalCase.name, _SEEDED_EVAL_CASE_NAMES),
+        "seeded_incidents": await _named_count(Incident, Incident.title, _SEEDED_INCIDENT_TITLES),
         "seeded_briefs": seeded_briefs_result.scalar_one(),
     }
 

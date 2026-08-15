@@ -131,7 +131,7 @@ async def _ingest_one(
             )
         )
     postmortem.status = PostmortemStatus.INDEXED
-    await db.commit()
+    await db.flush()
     return postmortem
 
 
@@ -345,7 +345,6 @@ async def _precompute_brief(
         generated_at=datetime.now(UTC),
     )
     db.add(brief_row)
-    await db.commit()
 
 
 async def _seed_incidents(
@@ -374,8 +373,7 @@ async def _seed_incidents(
             opened_at=datetime.now(UTC),
         )
         db.add(incident)
-        await db.commit()
-        await db.refresh(incident)
+        await db.flush()
         created += 1
 
         scenario_key = str(entry["matched_scenario_key"])
@@ -400,13 +398,17 @@ async def _seed_incidents(
                 extraction_confidence=None,
             )
         )
-        await db.commit()
 
         if entry["has_precomputed_brief"]:
             await _precompute_brief(
                 db, graph_store, incident=incident, affected_service_ids=affected_service_ids
             )
             briefs_created += 1
+
+        # One commit per entry -- incident, its signal row, and (if applicable) its
+        # precomputed brief land atomically, so a crash mid-entry never leaves a
+        # title a rerun would recognize as already-done but is actually incomplete.
+        await db.commit()
 
     logger.info(
         "incidents_seeded",

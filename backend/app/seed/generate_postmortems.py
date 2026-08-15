@@ -47,9 +47,15 @@ def _weighted_severity(rng: random.Random) -> str:
     return rng.choice(pool)
 
 
-def _title_for(scenario: Scenario, service: str) -> str:
+def _title_for(scenario: Scenario, service: str, occurrence: int) -> str:
+    # A scenario's candidate pool can be smaller than its postmortem count (e.g.
+    # cache_stampede has 3 cache-role services but 7 postmortems), so the same
+    # (scenario, service) pair recurs -- disambiguate past the first occurrence so
+    # seed.py's title-keyed idempotency lookup never collapses two distinct
+    # postmortems into one.
     readable = scenario.key.replace("_", " ")
-    return f"{service}: {readable}"
+    base = f"{service}: {readable}"
+    return base if occurrence == 1 else f"{base} ({occurrence})"
 
 
 def _compose_raw_text(vocab: Vocabulary, service: str) -> str:
@@ -116,13 +122,15 @@ def build_fixture() -> list[dict[str, Any]]:
     for scenario in SCENARIOS:
         count = 7 if scenario.key in _EXTRA_COUNT_KEYS else 6
         candidates = services_by_role[scenario.service_role]
+        occurrence_by_service: dict[str, int] = {}
         for i in range(count):
             service = candidates[i % len(candidates)]
+            occurrence_by_service[service] = occurrence_by_service.get(service, 0) + 1
             vocab = scenario.vocabularies[i % len(scenario.vocabularies)]
             occurred_at = _ANCHOR - timedelta(days=rng.randint(1, _THREE_YEARS_DAYS))
             postmortems.append(
                 {
-                    "title": _title_for(scenario, service),
+                    "title": _title_for(scenario, service, occurrence_by_service[service]),
                     "raw_text": _compose_raw_text(vocab, service),
                     "occurred_at": occurred_at.isoformat() + "Z",
                     "duration_minutes": rng.randint(10, 180),
