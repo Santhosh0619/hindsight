@@ -111,8 +111,10 @@ exactly and were created by Phase 1's initial migration.
   `--workspace-id` (default: look up the single `Workspace.is_demo` row, same lookup
   `seed.py` uses — errors with a clear "run `make seed` first" message if none exists).
 - `all` runs the three real modes sequentially against the same `EvalRun` machinery,
-  then prints the ablation comparison table (recall@1/recall@5/mrr per mode) and a
-  Markdown-formatted version of the same table, ready to paste into the README.
+  then prints the ablation comparison table (recall@1/recall@5/mrr per mode) plus a
+  second Markdown table scoped to recall@5/MRR, matching plan.md §13's own
+  README-ablation-table format exactly (`| Configuration | recall@5 | MRR |`) — ready
+  to paste in directly, not a reformatted echo of the wider terminal table above it.
 - A single mode prints that run's aggregate metrics plus a per-case table, failing cases
   first.
 - No `rich`/`tabulate` dependency added — plain aligned `str.format`/f-string tables,
