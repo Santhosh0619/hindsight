@@ -236,3 +236,43 @@ async def test_audit_log_is_paginated(client: AsyncClient) -> None:
     first_ids = {item["id"] for item in body["items"]}
     second_ids = {item["id"] for item in second_page.json()["items"]}
     assert first_ids.isdisjoint(second_ids)
+
+
+async def test_audit_log_filters_by_action_server_side(client: AsyncClient) -> None:
+    owner = await signup(client)
+    workspace_id = await _my_workspace_id(client, owner["access_token"])
+
+    # workspace.created already happened at signup; add a second, distinct action.
+    await client.post(
+        f"/api/v1/workspaces/{workspace_id}/members/invite-code",
+        headers=auth_headers(owner["access_token"]),
+    )
+
+    # A small limit proves this is a real server-side filter, not the route filtering
+    # only the one page it happened to fetch -- if filtering were client-side against
+    # an unfiltered page of 1, this would find nothing.
+    filtered = await client.get(
+        f"/api/v1/workspaces/{workspace_id}/audit-log?action=workspace.invite_code_rotated&limit=1",
+        headers=auth_headers(owner["access_token"]),
+    )
+    assert filtered.status_code == 200
+    actions = [entry["action"] for entry in filtered.json()["items"]]
+    assert actions == ["workspace.invite_code_rotated"]
+
+
+async def test_audit_log_filters_by_target_type(client: AsyncClient) -> None:
+    owner = await signup(client)
+    workspace_id = await _my_workspace_id(client, owner["access_token"])
+    await client.post(
+        f"/api/v1/workspaces/{workspace_id}/members/invite-code",
+        headers=auth_headers(owner["access_token"]),
+    )
+
+    filtered = await client.get(
+        f"/api/v1/workspaces/{workspace_id}/audit-log?target_type=workspace",
+        headers=auth_headers(owner["access_token"]),
+    )
+    assert filtered.status_code == 200
+    assert filtered.json()["items"]
+    target_types = {entry["target_type"] for entry in filtered.json()["items"]}
+    assert target_types == {"workspace"}

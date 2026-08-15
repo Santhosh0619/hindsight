@@ -1,6 +1,7 @@
 from app.schemas.incident import CandidateMatch, DraftBrief, NormalizedSignal
 from app.schemas.search import SearchResponseOut
 from app.services.extraction.prompting import UNTRUSTED_DATA_NOTICE
+from app.services.llm.provider import LLMResponse
 from app.services.llm.router import LLMRouter
 
 SYSTEM_PROMPT = (
@@ -47,5 +48,5 @@ def render_prompt(
     )
 
 
-async def draft_brief(router: LLMRouter, *, prompt: str) -> DraftBrief:
-    return await router.structured(prompt, system=SYSTEM_PROMPT, result_type=DraftBrief)
+async def draft_brief(router: LLMRouter, *, prompt: str) -> tuple[DraftBrief, LLMResponse]:
+    return await router.structured_with_usage(prompt, system=SYSTEM_PROMPT, result_type=DraftBrief)

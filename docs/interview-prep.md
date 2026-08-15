@@ -961,3 +961,92 @@ column by column. Once I fixed the component, I also rewrote the test to assert 
 occurrences, two modes times three columns, with a comment explaining specifically why
 two wouldn't have been enough — the number itself now encodes the requirement instead of
 just happening to match whatever the first draft produced.
+
+## Phase 13 — Observability, Settings, API Keys
+
+**Q: How do real per-node token counts show up on the Agent Runs page without touching
+the already-shipped agent pipeline's existing call sites?**
+
+A: `LLMProvider.structured()` already computed token usage internally from Phase 6 on —
+it just threw the number away instead of returning it. Rather than changing that
+function's return type, which would ripple into every caller including Phase 12's
+evaluation harness, I added a second method, `structured_with_usage()`, that returns
+both the parsed result and the usage alongside it. The normalizer and analyst nodes
+switched to the new method in place since neither has a caller outside the live
+pipeline. The critic node was trickier: `judge_verification` is called directly by
+Phase 12's evaluation runner, which expects a bare judgment object back and has no use
+for per-node tracking. Instead of adding a flag or changing its signature, I wrote a
+second function, `judge_verification_with_usage`, that does the identical call and
+just also returns the usage. It's a few duplicated lines, but the alternative was
+either breaking an already-reviewed module or growing a conditional branch into a
+function whose entire job is one LLM call. I confirmed nothing broke by running Phase
+12's own test suite unchanged and watching it stay green.
+
+**Q: You mention finding a real bug while building this phase, not just writing new
+code. What was it?**
+
+A: While wiring up `agent_runs.brief_id` — a new column I needed so a run could know
+which brief it actually produced — I found that the non-streaming brief-generation
+endpoint (`POST .../incidents/{id}/brief`, as opposed to the SSE `/brief/stream` route)
+called the compiled LangGraph directly with `graph.ainvoke()` instead of going through
+the same `stream_graph_events` wrapper the streaming route uses. That wrapper is the
+only thing that actually writes `AgentRunStep` rows as the graph executes. So every real
+brief generated through the non-streaming endpoint — a real, token-spending run — never
+wrote a single step row. That's a genuine gap from a couple of phases back, not
+something I introduced, and I found it by reading the code carefully while implementing
+this phase's own step-tracking, not because a test failed. I fixed it by routing both
+entry points through the same `stream_graph_events` function, so step-writing behavior
+is now guaranteed identical by construction instead of by two implementations someone
+has to remember to keep in sync. I also wrote a regression test specifically asserting
+that generating a brief through the non-streaming endpoint produces a real step
+waterfall, so this particular gap can't silently come back.
+
+**Q: Why SHA-256 for API keys instead of the argon2 you use for user passwords?**
+
+A: They're protecting against different threats. A user password is something a human
+picked, so it might be short, guessable, or reused — argon2's deliberate slowness
+exists specifically to make offline brute-forcing that kind of low-entropy secret
+expensive. An API key here is `secrets.token_urlsafe(32)` — 256 bits of real random
+entropy, not a human choice. Brute-forcing that is already computationally infeasible
+regardless of how fast or slow the hash is, so argon2 wouldn't add any real security
+margin. What it would add is latency, and this hash gets looked up on every single
+incoming webhook call — a high-frequency path where a fast hash is actually the right
+engineering tradeoff, not a shortcut. I wrote this reasoning into both the FRD and NFR
+so it reads as a deliberate, threat-model-aware choice rather than something a future
+reviewer flags as an inconsistency with the password hashing.
+
+**Q: Your Settings page's role gating changed between your first FRD draft and the
+final implementation — what happened?**
+
+A: My first FRD draft said the whole Settings page was owner-only. When I actually sat
+down to build it against the real `AppShell` component from Phase 3, I found that gate
+is `useRequireRole("owner", "responder")` — a responder can already reach the page —
+and the members list endpoint underneath it is a genuine any-role read on the backend.
+So the FRD was simply wrong about what was already built. Rather than change the code
+to match the incorrect doc, I corrected the doc to describe the design that actually
+makes sense: leave `AppShell`'s page-level gate alone, and gate the owner-only
+sub-panels — API keys, LLM provider connection, danger zone — individually within the
+page, since every one of their backend endpoints really is owner-only. The members
+panel itself renders for both roles but only shows the role-change/remove/invite
+controls to an owner. I caught this by reading my own doc against the real component
+before writing any panel code, and I extended the e2e RBAC suite with a test that logs
+in as a responder and asserts they see the members panel but not the three owner-only
+panel headings, then logs in as the owner and asserts they see all four — so this
+two-level gate is verified end to end, not just described in a doc.
+
+**Q: You mentioned a Docker gotcha that came back a fourth time. What is it, and why
+does it keep happening?**
+
+A: This project runs two separate `docker-compose` files — the dev stack, which
+bind-mounts source code for fast hot-reload iteration, and an isolated test stack for
+e2e runs, which instead `COPY`s the source into the image at build time so the test
+environment represents something closer to what actually ships. The trap is that a test
+container built before some new code existed has no way to see that code later, no
+matter what's sitting on disk in the working tree — the fix, dev-side reflexes,
+doesn't apply. This bit me on Phase 10, 11, and 12 too, and it bit me again this phase:
+all three new e2e specs failed with the app literally rendering the old "not built yet"
+placeholder page, even though `tsc`, vitest, and the production build all passed
+against the same source moments earlier. The fix each time is the same — tear the test
+stack down and bring it back up with `--build` — but the real lesson by the fourth
+occurrence is procedural: when an e2e spec fails against code that demonstrably works
+in isolation, check for a stale baked image before assuming the code itself is wrong.

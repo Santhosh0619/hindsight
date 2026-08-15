@@ -35,6 +35,13 @@ class TriageState(TypedDict):
     from_cache: bool
     trace: list[TraceEntry]
     messages: list[dict[str, str]]
+    # Set by whichever node most recently made an LLM call this step (0 otherwise) --
+    # not a running total. `stream_graph_events` reads these straight off each node's
+    # own returned dict (not the graph's merged cumulative state) to populate that
+    # step's own `AgentRunStep.tokens_in/out`, so they only need to be "this node's
+    # own cost," not accumulated here.
+    step_tokens_in: int
+    step_tokens_out: int
 
 
 def initial_state(*, incident_id: uuid.UUID, workspace_id: uuid.UUID, raw_text: str) -> TriageState:
@@ -54,4 +61,6 @@ def initial_state(*, incident_id: uuid.UUID, workspace_id: uuid.UUID, raw_text: 
         from_cache=False,
         trace=[],
         messages=[],
+        step_tokens_in=0,
+        step_tokens_out=0,
     )

@@ -1,5 +1,6 @@
 from app.schemas.incident import DraftBrief, LLMVerificationJudgment, NormalizedSignal
 from app.services.extraction.prompting import UNTRUSTED_DATA_NOTICE
+from app.services.llm.provider import LLMResponse
 from app.services.llm.router import LLMRouter
 
 _SYSTEM_PROMPT = (
@@ -30,5 +31,18 @@ async def judge_verification(
 ) -> LLMVerificationJudgment:
     prompt = f"{UNTRUSTED_DATA_NOTICE}\n\n{_render(signal, draft)}"
     return await router.structured(
+        prompt, system=_SYSTEM_PROMPT, result_type=LLMVerificationJudgment
+    )
+
+
+async def judge_verification_with_usage(
+    router: LLMRouter, *, signal: NormalizedSignal, draft: DraftBrief
+) -> tuple[LLMVerificationJudgment, LLMResponse]:
+    """Same call as `judge_verification`, plus token usage -- a separate function
+    rather than changing `judge_verification`'s own return shape, since Phase 12's
+    evaluation harness (`app/services/evaluation/runner.py`) already calls it expecting
+    a bare `LLMVerificationJudgment` and has no use for per-node token tracking."""
+    prompt = f"{UNTRUSTED_DATA_NOTICE}\n\n{_render(signal, draft)}"
+    return await router.structured_with_usage(
         prompt, system=_SYSTEM_PROMPT, result_type=LLMVerificationJudgment
     )

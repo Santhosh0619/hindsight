@@ -1,4 +1,5 @@
 from collections.abc import Awaitable, Callable
+from typing import TypeVar
 
 from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential
 
@@ -9,6 +10,11 @@ from app.services.llm.gemini import GeminiProvider
 from app.services.llm.groq import GroqLLMProvider
 from app.services.llm.ollama import OllamaLLMProvider
 from app.services.llm.provider import LLMProvider, LLMResponse, T
+
+# _try_providers' own return type is unconstrained (unlike provider.py's T, which is
+# bound to BaseModel for structured()'s result_type) -- structured_with_usage() calls
+# it with a tuple[T, LLMResponse], which isn't itself a BaseModel.
+R = TypeVar("R")
 
 logger = get_logger(__name__)
 
@@ -30,7 +36,14 @@ class LLMRouter:
             lambda p: p.structured(prompt, system=system, result_type=result_type)
         )
 
-    async def _try_providers(self, call: Callable[[LLMProvider], Awaitable[T]]) -> T:
+    async def structured_with_usage(
+        self, prompt: str, *, system: str, result_type: type[T]
+    ) -> tuple[T, LLMResponse]:
+        return await self._try_providers(
+            lambda p: p.structured_with_usage(prompt, system=system, result_type=result_type)
+        )
+
+    async def _try_providers(self, call: Callable[[LLMProvider], Awaitable[R]]) -> R:
         errors: list[str] = []
         for provider in self._providers:
             try:

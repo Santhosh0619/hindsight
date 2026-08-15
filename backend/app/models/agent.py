@@ -17,6 +17,13 @@ class AgentRun(Base, UUIDPrimaryKeyMixin):
         nullable=False,
         index=True,
     )
+    # Set once the briefer node persists a Brief for this run -- lets F12 resolve
+    # per-run cache-hit status directly via a join, instead of guessing which of an
+    # incident's (possibly several, across regenerations) Brief rows this run
+    # produced from timestamps alone.
+    brief_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("briefs.id", ondelete="SET NULL"), nullable=True
+    )
     graph_version: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
