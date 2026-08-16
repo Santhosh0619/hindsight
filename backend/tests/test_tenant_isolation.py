@@ -151,9 +151,21 @@ async def test_a_second_workspace_cannot_read_the_first_workspaces_resource(
     token_b = owner_b["access_token"]
     workspace_b = await _workspace_id(client, token_b)
 
-    path = path_template.format(workspace_id=workspace_b, **_id_kwargs(path_template, resource_id))
+    # _CREATORS/_nested_get_routes() key on the router's own unprefixed path template
+    # (matching what app.routes' original_router.routes exposes) -- the real mounted
+    # path needs the /api/v1 prefix app.main adds via include_router(..., prefix=
+    # "/api/v1"), or this request hits no route at all and 404s on Starlette's own
+    # generic "not found" regardless of whether the app's tenant-isolation logic
+    # works, making the assertion below vacuous.
+    path = "/api/v1" + path_template.format(
+        workspace_id=workspace_b, **_id_kwargs(path_template, resource_id)
+    )
     response = await client.get(path, headers=auth_headers(token_b))
     assert response.status_code == 404, (path_template, response.text)
+    # Confirms this really is the app's own NotFoundError envelope, not Starlette's
+    # generic 404 for an unmatched route -- the exact distinction a missing /api/v1
+    # prefix would otherwise hide.
+    assert response.json()["error"]["code"] == "not_found", (path_template, response.text)
 
 
 def _id_kwargs(path_template: str, resource_id: str) -> dict[str, str]:

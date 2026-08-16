@@ -6,6 +6,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.db.session import get_engine
 from app.main import app as real_app
 from app.models.catalog import Service
@@ -128,7 +129,7 @@ class TestRequestSizeCap:
     async def test_an_oversized_request_body_is_rejected_before_it_reaches_the_route(
         self, client: AsyncClient
     ) -> None:
-        oversized_password = "x" * (15_728_640 + 1)
+        oversized_password = "x" * (get_settings().max_request_bytes + 1)
         response = await client.post(
             "/api/v1/auth/login",
             content=f'{{"email": "a@example.com", "password": "{oversized_password}"}}'.encode(),

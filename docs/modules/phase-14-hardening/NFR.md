@@ -12,9 +12,10 @@
 
 ## Security
 
-- Rate limiting on `/auth/login`/`/auth/signup`/`/auth/refresh` is the actual point of
-  this phase's auth-hardening: today these have zero backstop against credential
-  stuffing or signup spam, unlike `/auth/demo` which Phase 11 already bounded.
+- Rate limiting on `/auth/login`/`/auth/signup` is the actual point of this phase's
+  auth-hardening: today these have zero backstop against credential stuffing or
+  signup spam, unlike `/auth/demo` which Phase 11 already bounded. `/auth/refresh` is
+  deliberately excluded — see FR-01/FRD "Rate limiting" for why.
 - The global exception handler's entire purpose is preventing information disclosure —
   an unhandled exception's message, type, and traceback must never reach the client,
   only the structured server-side log. Verified by a test that raises a deliberate bug

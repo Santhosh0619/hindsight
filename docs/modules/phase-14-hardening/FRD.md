@@ -55,8 +55,8 @@ new table, no new column.
   `X-Forwarded-For` proxy case, per its own docstring) is reused for the new checks,
   not reimplemented.
 - `incidents.py`'s `generate_brief`/`stream_brief` routes check `brief_bucket.consume
-  (str(workspace_id))` before doing any real work — before the demo-guest carve-out's
-  own bucket check where both apply, so a demo guest is still bounded by both limits
+  (str(workspace_id))` right after the demo-guest carve-out's own bucket check, before
+  doing any real work, so a demo guest is still bounded by both limits
   independently, matching FR-02's "independent of the demo bucket" requirement.
 
 ### Global exception handling (`app/core/errors.py`, `app/main.py`)
@@ -73,7 +73,7 @@ new table, no new column.
   `error`.
 - `app_error_handler` (the existing `AppError` handler) gains the same `request_id`
   field in its envelope, read from `structlog.contextvars.get_contextvars()` — both
-  handlers share one small helper (`_current_request_id() -> str | None`) so the two
+  handlers share one small helper (`get_request_id() -> str | None`) so the two
   envelopes can't drift apart in shape.
 
 ### Security headers (`app/core/security_headers.py`, new; wired in `app/main.py`)
