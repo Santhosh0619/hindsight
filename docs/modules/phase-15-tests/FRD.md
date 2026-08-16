@@ -59,17 +59,26 @@ None.
   `ValidationAppError` shape) rather than `500` — proving the route's Pydantic model
   and error handling are wired correctly, without needing a full valid payload.
 
-### `backend/app/services/llm_test_service.py` — no production code change
+### `backend/tests/conftest.py` — no production code change
 
-- The fix here is entirely test-side: `test_settings_api.py`'s
-  `test_llm_test_reports_unconfigured_slots_without_calling_them` currently exercises
-  the real `POST .../settings/llm/test` route with no LLM keys configured, which
-  constructs a real `OllamaLLMProvider` and attempts a real (local, fast-failing, but
-  real) TCP connection to `ollama_base_url`. Fixed by monkeypatching
-  `llm_test_service.OllamaLLMProvider` (the name the module imports it under) with a
-  fake provider whose `.complete()` raises immediately — same assertions
-  (`configured=True`, `ok=False`, `error` populated, `latency_ms` present), now
-  reached with zero real sockets opened.
+- The audit's real network violation turned out bigger than the one test that
+  surfaced it: `OllamaLLMProvider` is *always* constructed regardless of whether an
+  LLM key is configured (Ollama needs none), by two separate call paths —
+  `llm_test_service.test_all_providers` (the `/settings/llm/test` route) *and*
+  `build_router()`, which is called for real inside the actual `POST
+  .../incidents/{id}/brief` route handler, not just in an LLM-specific unit test. Any
+  test exercising either path — including, as this phase found, the new generated
+  `test_api_smoke.py` sweep, which touches both — was making a real (local,
+  fast-failing, but real) TCP connection attempt to `ollama_base_url`. Fixed once, at
+  the source, with a new `autouse` fixture in `conftest.py` that monkeypatches
+  `OllamaLLMProvider`'s three `LLMProvider` protocol methods (`complete`/`structured`/
+  `structured_with_usage`) at the *class* level — not per-module import site — so
+  every current and future call path through it is covered by construction, rather
+  than requiring every test file that happens to exercise one of those routes to
+  remember its own mock. `test_settings_api.py`'s own test needed no file-local mock
+  at all once this landed; its assertions (`configured=True`, `ok=False`, `error`
+  populated, `latency_ms` present) are unchanged, now reached with zero real sockets
+  opened.
 
 ### `backend/pyproject.toml`, `Makefile` — coverage visibility
 

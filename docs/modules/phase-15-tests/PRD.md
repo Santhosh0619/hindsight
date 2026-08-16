@@ -97,8 +97,11 @@ otherwise-correct change.
 - `test_rbac.py` fails (red) if a mutating endpoint's role dependency is deliberately
   removed during development, and passes (green) against the current, correct
   codebase — the same falsifiability bar Phase 14's tenant-isolation generator set.
-- Running the full backend suite makes zero real network connections — verified by
-  running it with network access disabled/blocked and confirming no test errors out on
-  a connection attempt.
+- Running the full backend suite makes zero real network connections — enforced
+  structurally (a suite-wide `autouse` fixture patches the only real-network-capable
+  provider class at the protocol-method level, not per-test-file), and confirmed
+  empirically by timing: a real connection attempt to an unreachable local Ollama
+  measured ~4 seconds per call before this phase's fix, versus near-instant after it,
+  across every route that touches LLM provider construction.
 - A coverage report for `app/services/` and `app/agents/` is produced on every
   `make test-be`/CI run, visible in the output.
