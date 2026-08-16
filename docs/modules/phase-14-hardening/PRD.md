@@ -36,9 +36,13 @@ test immediately instead of shipping a cross-tenant data leak.
 
 ## Functional Requirements
 
-FR-01: `POST /auth/login`, `/auth/signup`, and `/auth/refresh` are rate-limited per
-client IP (reusing the `TokenBucket` primitive Phase 11 already built and explicitly
-earmarked for this phase), returning 429 with `RateLimitedError` past the threshold —
+FR-01: `POST /auth/login` and `/auth/signup` are rate-limited per client IP (reusing
+the `TokenBucket` primitive Phase 11 already built and explicitly earmarked for this
+phase), returning 429 with `RateLimitedError` past the threshold. `/auth/refresh` is
+deliberately excluded — it isn't a guessable-credential endpoint (it requires an
+already-valid signed cookie, already protected by single-use rotation + reuse
+detection since Phase 2) and fires on every page load's boot-time session restore, so
+rate-limiting it would throttle ordinary usage for no real security benefit —
 mirroring `/auth/demo`'s existing pattern rather than inventing a second mechanism.
 
 FR-02: `POST /workspaces/{id}/incidents/{id}/brief` and its `/brief/stream` sibling are

@@ -4,9 +4,10 @@
 
 No new endpoints. Existing endpoints gain new failure modes and response headers.
 
-### `POST /auth/login`, `POST /auth/signup`, `POST /auth/refresh`
+### `POST /auth/login`, `POST /auth/signup`
 - New error code: 429 `rate_limited` past a per-IP `TokenBucket` threshold, identical
-  envelope shape to `/auth/demo`'s existing 429.
+  envelope shape to `/auth/demo`'s existing 429. `/auth/refresh` is unchanged — see
+  PRD "Functional Requirements" FR-01 for why it's excluded.
 - Every response (success or error) now carries `X-Request-ID`, `X-Content-Type-Options`,
   `X-Frame-Options`, `Referrer-Policy`, and (prod only) `Strict-Transport-Security`.
 
@@ -37,13 +38,19 @@ new table, no new column.
 ### Rate limiting (`app/services/rate_limit.py`, `app/api/v1/auth.py`, `app/api/v1/incidents.py`)
 
 - Two new module-level `TokenBucket` instances alongside the existing
-  `demo_signup_bucket`/`demo_brief_bucket`: `login_bucket` (keyed by client IP, tighter
-  capacity than the demo bucket — a login attempt is cheap to make and the threat model
-  is credential stuffing) and `brief_bucket` (keyed by `workspace_id`, since brief
-  generation cost is a workspace-level concern, not an individual caller's).
-  `signup`/`refresh` reuse `login_bucket` — the threat (automated abuse of a
-  cheap-to-call auth endpoint) is the same for all three, and Phase 11's own precedent
-  is one bucket per *concern*, not one per route.
+  `demo_signup_bucket`/`demo_brief_bucket`: `login_bucket` (keyed by client IP,
+  capacity 30/60s — generous enough that no real user or the e2e suite's own rapid
+  signup/login traffic ever trips it, while still bounding automated credential
+  stuffing to a rate password hashing's own cost already makes expensive per attempt)
+  and `brief_bucket` (keyed by `workspace_id`, since brief generation cost is a
+  workspace-level concern, not an individual caller's). `signup` reuses `login_bucket`
+  — same threat model as login, automated abuse of a cheap-to-call auth endpoint, and
+  Phase 11's own precedent is one bucket per *concern*, not one per route.
+  `/auth/refresh` deliberately does not consume this bucket at all (see PRD FR-01) —
+  discovered during implementation that it fires on every page load's boot-time
+  session restore (57+ times across the e2e suite alone), so gating it would throttle
+  ordinary navigation for no real security benefit, since it isn't a
+  guessable-credential endpoint in the first place.
 - `auth.py`'s existing `_client_ip(request)` helper (already handles the
   `X-Forwarded-For` proxy case, per its own docstring) is reused for the new checks,
   not reimplemented.
@@ -95,13 +102,17 @@ new table, no new column.
 
 - A `BaseHTTPMiddleware` subclass reading `Content-Length` off the incoming request
   before calling `call_next`; if present and over `settings.max_request_bytes`
-  (new setting, default `2_097_152` — 2MB, comfortably above any legitimate JSON
-  payload this API accepts, including a full postmortem body under
-  `max_upload_bytes`'s own 10MB text cap... note the two caps intentionally differ:
-  `max_upload_bytes` bounds one specific field's *character* count post-parse,
-  `max_request_bytes` bounds the *whole request body's byte size* pre-parse as a
-  cheap first line of defense — a request missing `Content-Length` (chunked transfer)
-  is let through to normal parsing/validation rather than blocked, since this is a
+  (new setting, default `15_728_640` — 15MB, deliberately *above*
+  `max_upload_bytes`'s own 10MB text cap, not below it — a legitimate postmortem's
+  `raw_text` can sit right up against that 10MB field limit plus JSON structure
+  overhead, so this outer check must never be tighter than the field-level cap it
+  wraps, or it would reject requests the field validator was always meant to allow.
+  The two caps intentionally differ in *kind*, not just size: `max_upload_bytes`
+  bounds one specific field's *character* count post-parse, `max_request_bytes`
+  bounds the *whole request body's byte size* pre-parse as a cheap first line of
+  defense against a request nowhere near legitimate (hundreds of MB) — a request
+  missing `Content-Length` (chunked transfer) is let through to normal
+  parsing/validation rather than blocked, since this is a
   defense-in-depth measure, not the only size check in the system.
 
 ### Outbound LLM call timeouts (`app/services/llm/{gemini,groq,ollama}.py`)

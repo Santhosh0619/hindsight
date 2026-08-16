@@ -65,22 +65,34 @@
 
 ## Testability
 
-- `test_rate_limit.py` (extends the existing `TokenBucket` unit tests from Phase 11's
-  suite if present, else new): login/signup/refresh 429 past threshold, brief
-  generation 429 past its own independent threshold, demo bucket still independently
-  enforced.
-- `test_error_handling.py`: a route that deliberately raises a plain `Exception`
-  returns the generic envelope with a `request_id` and no leaked internals; an
-  `AppError` subclass's envelope also carries `request_id`.
-- `test_security_headers.py`: every response carries the four headers (three always,
-  HSTS only when `cookie_secure=True` — tested with both settings values).
-- `test_request_size.py`: a request with `Content-Length` over the cap gets 413 before
-  any service function runs (asserted via a spy/mock that the service was never
-  called); a request under the cap is unaffected.
-- `test_hardening.py`: the query-count regression guard for `list_postmortems`
-  (FR-08).
-- `test_tenant_isolation.py`: the generated cross-tenant-404 sweep (FR-09), plus an
-  assertion the generator finds at least the known minimum route count.
+All of the below live in one `test_hardening.py`, grouped into classes by concern
+(`TestRateLimiting`, `TestErrorHandling`, `TestSecurityHeaders`, `TestRequestSizeCap`,
+`TestTokenBucket`, `TestNPlusOneRegressionGuard`) rather than one file per FR — each
+class is small enough that a separate file per concern would just be import overhead
+for no organizational benefit:
+
+- Rate limiting: login 429 past threshold with a `request_id` in the body; `/refresh`
+  confirmed *not* rate-limited even under heavy repeated calls; brief generation 429
+  past its own independent per-workspace threshold; a different workspace's bucket
+  confirmed independent.
+- Error handling: a route that deliberately raises a plain `Exception` returns the
+  generic envelope with a `request_id` and no leaked internals (asserted by string
+  absence, not just status code); a typed `AppError`'s envelope also carries
+  `request_id`.
+- Security headers: every response carries the three unconditional headers; HSTS
+  confirmed *absent* under this test build's `cookie_secure=False`, the honest
+  negative counterpart proving the gate is real.
+- Request size cap: an oversized body 413s before any service function runs; a
+  normal-sized request is unaffected.
+- `TestNPlusOneRegressionGuard` (FR-08): the query-count regression guard for
+  `list_postmortems`, seeding 2 vs. 50 rows and asserting the SQL statement count
+  stays identical.
+
+`test_tenant_isolation.py` (FR-09) is its own file, separate from `test_hardening.py`,
+since it's structurally different — a generator over the app's own route table, not a
+set of hand-written cases — with its own two meta-tests (the generator finds a sane
+minimum number of routes; every matching route is either covered by a fixture or has a
+documented `KNOWN_UNCOVERED` reason) plus one parametrized test per covered route.
 
 ## Constraints
 
@@ -88,6 +100,6 @@
   (rate limits) or stateless middleware/handler behavior.
 - Async throughout; full type hints; mypy strict clean, matching every prior phase.
 - No hardcoded timeout/size-cap value inline — both are `Settings` fields with
-  documented defaults (`llm_request_timeout_seconds=30`, `max_request_bytes=2_097_152`),
+  documented defaults (`llm_request_timeout_seconds=30`, `max_request_bytes=15_728_640`),
   overridable via environment, matching this project's existing convention for every
   other tunable (`critic_threshold`, `job_lease_seconds`, etc.).
