@@ -92,8 +92,10 @@ than an unexplained gap in this phase's own work.
   ./frontend` (via `make build`) both succeed and produce a working image, with a
   build context that excludes `.git`/cache/artifact directories.
 - `.github/workflows/keep-alive.yml` is syntactically valid, runs on a 10-minute cron
-  schedule, and its own logic — reading an unset repository variable and skipping
-  rather than failing — is verified by actually running it once with the variable
-  unset (via `workflow_dispatch`), not just read and assumed correct.
+  schedule, and its skip-vs-ping logic is verified by actually running the substituted
+  shell script — not just read and assumed correct — for both the unset-variable and
+  set-variable cases. GitHub only registers a `workflow_dispatch`-triggerable workflow
+  once its file exists on the default branch, so the on-`main` live trigger happens as
+  the first post-merge action, immediately after this PR merges, not before.
 - The existing `ci.yml` and both Dockerfiles are otherwise untouched; `make test`
   (backend + frontend + e2e) still green, exactly as before this phase.

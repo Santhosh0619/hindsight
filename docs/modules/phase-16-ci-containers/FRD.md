@@ -99,9 +99,11 @@ Makefile's `.PHONY` list with no recipe behind it (`make build` currently fails 
 ## Edge Cases & Error Handling
 
 - **The workflow runs before Phase 18 ever deploys anything**: handled by the
-  unset-variable skip path above — verified by actually triggering the workflow via
-  `workflow_dispatch` with the variable unset, not just read and assumed correct (see
-  PRD Acceptance Criteria).
+  unset-variable skip path above — verified by running the exact substituted shell
+  script locally for both the unset- and set-variable cases (see PRD Acceptance
+  Criteria); the live on-GitHub `workflow_dispatch` trigger happens right after this
+  PR merges, since GitHub only exposes manual dispatch for a workflow file once it
+  exists on the default branch — this phase can't trigger it a step earlier than that.
 - **A transient network blip fails one tick**: no retry logic added — a single missed
   10-minute tick failing loudly is the correct behavior for this workflow's actual
   job (which is generating periodic traffic to prevent idle-sleep, not monitoring
