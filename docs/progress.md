@@ -1333,7 +1333,7 @@ Full writeup: ADR 0015.
 | 10. TEST-E2E | done | Backend-only phase per PRD's Out of Scope — no new specs, confirmed the existing suite still passes: 29/29 against `docker-compose.test.yml` |
 | 11. PUSH | done | `feat/test-coverage` pushed with `--no-verify` — every check the hook runs had already been run and confirmed green manually this session |
 | 12. PR | done | [#19](https://github.com/Santhosh0619/hindsight/pull/19) opened against `main` |
-## Phase 16 — CI & Containers — done, PR open ([PR #20](https://github.com/Santhosh0619/hindsight/pull/20))
+## Phase 16 — CI & Containers — merged ([PR #20](https://github.com/Santhosh0619/hindsight/pull/20))
 
 Cross-cutting, config-only pass — no application code changed. An audit found CI
 (`.github/workflows/ci.yml`) and both multi-stage Dockerfiles already existed and
@@ -1368,5 +1368,11 @@ pass, the cleanest review result of any phase so far.
 | 10. TEST-E2E | done | No app code changed this phase; existing suite re-run to confirm no regression: 29/29 |
 | 11. PUSH | done | `feat/ci-containers` pushed with `--no-verify` — no application code changed, so the hook's full pytest re-run would have been pure overhead on top of what was already verified manually |
 | 12. PR | done | [#20](https://github.com/Santhosh0619/hindsight/pull/20) opened against `main` |
+| 13. MERGE | done | Merged with `--merge` (real merge commit `e965562`) after explicit go-ahead; branch deleted both sides |
+
+Post-merge, triggered `keep-alive.yml` live via `workflow_dispatch` on `main` (the
+first point it could exist to be dispatched) — the real GitHub Actions run printed
+"HEALTH_CHECK_URL not set, nothing to ping yet." and exited 0, exactly matching the
+pre-merge local verification. Closes the loop ADR 0016 §2 opened.
 ## Phase 17 — Documentation — pending
 ## Phase 18 — Deploy & Final Verification — pending
