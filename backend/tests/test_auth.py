@@ -55,7 +55,12 @@ async def test_login_wrong_password_and_unknown_email_give_same_error(
 
     assert wrong_password.status_code == 401
     assert unknown_email.status_code == 401
-    assert wrong_password.json() == unknown_email.json()
+    # request_id is legitimately unique per request (Phase 14 hardening) -- everything
+    # else in the envelope must still be identical, or the message itself becomes a
+    # user-enumeration tell.
+    assert wrong_password.json()["error"]["code"] == unknown_email.json()["error"]["code"]
+    assert wrong_password.json()["error"]["message"] == unknown_email.json()["error"]["message"]
+    assert wrong_password.json()["error"]["detail"] == unknown_email.json()["error"]["detail"]
 
 
 async def test_me_returns_user_and_memberships(client: AsyncClient) -> None:
@@ -103,8 +108,16 @@ async def test_refresh_reuse_revokes_the_whole_family(client: AsyncClient) -> No
 
     # Reuse must not be distinguishable from any other refresh failure by message —
     # otherwise the error text itself becomes the "this token was reused" tell the
-    # NFR forbids.
-    assert reuse_response.json() == also_revoked_response.json()
+    # NFR forbids. request_id is legitimately unique per request (Phase 14 hardening),
+    # excluded from this comparison on purpose.
+    assert reuse_response.json()["error"]["code"] == also_revoked_response.json()["error"]["code"]
+    assert (
+        reuse_response.json()["error"]["message"]
+        == also_revoked_response.json()["error"]["message"]
+    )
+    assert (
+        reuse_response.json()["error"]["detail"] == also_revoked_response.json()["error"]["detail"]
+    )
 
 
 async def test_refresh_without_cookie_is_unauthorized(client: AsyncClient) -> None:
