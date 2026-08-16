@@ -1330,7 +1330,7 @@ Full writeup: ADR 0015.
 | 5. CODE-BE | done | `test_rbac.py`/`test_api_smoke.py` generated sweeps (`febacef`), Ollama network-call fix + `pytest-cov` wiring (`007ee09`) |
 | 6. TEST-BE | done | `ruff`/`mypy --strict` clean; full suite 313/313, 80% coverage on `app/services`+`app/agents` |
 | 9. REVIEW | **CHANGES REQUIRED → fixed → self-verified** | Single combined pass found 1 BLOCKING (the tautological `KNOWN_UNCOVERED` meta-test, in both new files) + 1 WARNING (`test_rbac.py` sending a body on `DELETE`, contradicting its own FRD) + 2 NOTE (a route-count off-by-one, a forward ADR reference); route-table traversal and the network fix's coverage were independently re-verified and confirmed correct, not just asserted. All findings fixed, self-verified via a targeted re-run (84/84 passed) plus `ruff`/`mypy`, not a second reviewer pass |
-| 10. TEST-E2E | pending | Backend-only phase per PRD's Out of Scope — confirming the existing e2e suite still passes rather than adding new specs |
+| 10. TEST-E2E | done | Backend-only phase per PRD's Out of Scope — no new specs, confirmed the existing suite still passes: 29/29 against `docker-compose.test.yml` |
 | 11. PUSH | pending | |
 | 12. PR | pending | |
 ## Phase 16 — CI & Containers — pending
