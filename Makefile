@@ -48,6 +48,14 @@ test-e2e:
 	cd e2e && npm run test
 	docker compose -f docker-compose.test.yml down
 
+# ── Containers ────────────────────────────────────────────────────────────────
+# Local-only verification that both production Dockerfile stages still build cleanly
+# -- not used by CI (which doesn't build images at all yet; that's Phase 18's deploy
+# step), just a way to catch a broken Dockerfile before an actual deploy attempt.
+build:
+	docker build --target production -t hindsight-backend:local ./backend
+	docker build --target production -t hindsight-frontend:local ./frontend
+
 # ── Code quality ──────────────────────────────────────────────────────────────
 lint:
 	cd backend && ruff check .

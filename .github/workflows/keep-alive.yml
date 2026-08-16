@@ -1,0 +1,25 @@
+name: Keep-Alive
+
+# Pings the deployed app's /health endpoint every 10 minutes so a free-tier host
+# (Fly.io / Render / HF Spaces) never sees the container sit idle long enough to
+# auto-sleep -- see plan.md's "Free-tier host cold starts" risk entry. HEALTH_CHECK_URL
+# is unset until Phase 18 deploys somewhere; until then this job skips (succeeds)
+# instead of failing every ten minutes for a URL that doesn't exist yet.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    name: Ping /health
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping deployed health endpoint
+        run: |
+          if [[ -z "${{ vars.HEALTH_CHECK_URL }}" ]]; then
+            echo "HEALTH_CHECK_URL not set, nothing to ping yet."
+            exit 0
+          fi
+          curl -f --max-time 10 "${{ vars.HEALTH_CHECK_URL }}"
