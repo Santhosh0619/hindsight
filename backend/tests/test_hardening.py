@@ -12,7 +12,7 @@ from app.main import app as real_app
 from app.models.catalog import Service
 from app.models.postmortem import Postmortem, PostmortemService, PostmortemStatus, ServiceLinkRole
 from app.services import postmortem_service
-from app.services.rate_limit import TokenBucket, brief_bucket
+from app.services.rate_limit import TokenBucket, brief_bucket, login_bucket
 from tests.conftest import auth_headers, signup
 
 
@@ -26,11 +26,15 @@ class TestRateLimiting:
         owner = await signup(client)
         email = owner["user"]["email"]
 
+        # +1 past capacity, read from the real bucket rather than a hardcoded copy of
+        # it -- a capacity change (as already happened once this phase) shouldn't
+        # silently stop testing the real boundary.
+        attempts = login_bucket._capacity + 1
         responses = [
             await client.post(
                 "/api/v1/auth/login", json={"email": email, "password": "wrong-password"}
             )
-            for _ in range(31)
+            for _ in range(attempts)
         ]
         assert responses[-1].status_code == 429
         body = responses[-1].json()

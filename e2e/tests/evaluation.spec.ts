@@ -1,14 +1,8 @@
 import { test, expect } from "@playwright/test";
 
 async function loginAsDemoGuest(page: import("@playwright/test").Page): Promise<void> {
-  // A distinct X-Forwarded-For per call gives each demo login its own
-  // demo_signup_bucket key (app/services/rate_limit.py), isolated from every other
-  // test -- and, since it's randomized rather than a small sequential counter, from
-  // repeat runs of this same file within the bucket's 12-minute refill window too
-  // (a fixed counter collides with itself across reruns while iterating).
-  await page.context().setExtraHTTPHeaders({
-    "X-Forwarded-For": `203.0.113.${Math.floor(Math.random() * 254) + 1}`,
-  });
+  // No X-Forwarded-For spoofing -- see demo-mode.spec.ts's own loginAsDemoGuest for
+  // why (Phase 14 hardening's CORS allow_headers deliberately excludes it).
   await page.goto("/");
   await page.getByRole("button", { name: "Try the live demo" }).click();
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });

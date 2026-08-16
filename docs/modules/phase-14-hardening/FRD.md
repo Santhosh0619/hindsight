@@ -39,10 +39,13 @@ new table, no new column.
 
 - Two new module-level `TokenBucket` instances alongside the existing
   `demo_signup_bucket`/`demo_brief_bucket`: `login_bucket` (keyed by client IP,
-  capacity 30/60s — generous enough that no real user or the e2e suite's own rapid
-  signup/login traffic ever trips it, while still bounding automated credential
-  stuffing to a rate password hashing's own cost already makes expensive per attempt)
-  and `brief_bucket` (keyed by `workspace_id`, since brief generation cost is a
+  capacity 100/60s — the first pass at 30/60s looked generous on paper but measurably
+  exhausted mid-run against the real e2e suite, which simulates dozens of distinct
+  "users" signing up/logging in from one shared test-runner IP within a couple of
+  minutes; 100/60s covers that real, measured volume with margin while still bounding
+  automated credential stuffing to a rate password hashing's own cost already makes
+  expensive per attempt) and `brief_bucket` (keyed by `workspace_id`, since brief
+  generation cost is a
   workspace-level concern, not an individual caller's). `signup` reuses `login_bucket`
   — same threat model as login, automated abuse of a cheap-to-call auth endpoint, and
   Phase 11's own precedent is one bucket per *concern*, not one per route.
