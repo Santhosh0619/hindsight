@@ -73,7 +73,7 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/hindsight_ci
           JWT_SECRET: ci-secret-not-for-production
           LLM_API_KEY: ""
-        run: cd backend && pytest tests/ -v --tb=short -q --junit-xml=junit.xml
+        run: cd backend && pytest tests/ -v --tb=short -q --junit-xml=junit.xml --cov=app/services --cov=app/agents --cov-report=term-missing
       - uses: actions/upload-artifact@v4
         if: always()
         with:

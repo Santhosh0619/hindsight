@@ -38,7 +38,7 @@ eval:
 test: test-be test-fe test-e2e
 
 test-be:
-	docker compose exec api bash -c "ruff check . && mypy app --strict && pytest tests/ -v --tb=short -q"
+	docker compose exec api bash -c "ruff check . && mypy app --strict && pytest tests/ -v --tb=short -q --cov=app/services --cov=app/agents --cov-report=term-missing"
 
 test-fe:
 	cd frontend && npx tsc --noEmit && npm run build && npm run test
