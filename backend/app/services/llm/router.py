@@ -66,11 +66,28 @@ class LLMRouter:
 
 def build_router(settings: Settings) -> LLMRouter:
     providers: list[LLMProvider] = []
+    timeout = settings.llm_request_timeout_seconds
     if settings.llm_api_key:
-        providers.append(GeminiProvider(api_key=settings.llm_api_key, model=settings.llm_model))
+        providers.append(
+            GeminiProvider(
+                api_key=settings.llm_api_key,
+                model=settings.llm_model,
+                request_timeout_seconds=timeout,
+            )
+        )
     if settings.groq_api_key:
-        providers.append(GroqLLMProvider(api_key=settings.groq_api_key, model=settings.groq_model))
+        providers.append(
+            GroqLLMProvider(
+                api_key=settings.groq_api_key,
+                model=settings.groq_model,
+                request_timeout_seconds=timeout,
+            )
+        )
     providers.append(
-        OllamaLLMProvider(base_url=settings.ollama_base_url, model=settings.ollama_model)
+        OllamaLLMProvider(
+            base_url=settings.ollama_base_url,
+            model=settings.ollama_model,
+            request_timeout_seconds=timeout,
+        )
     )
     return LLMRouter(providers)

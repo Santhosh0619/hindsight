@@ -32,16 +32,25 @@ async def test_all_providers(settings: Settings) -> list[LLMProviderTestOut]:
     actually answered, defeating the point of a per-provider diagnostic."""
     results: list[LLMProviderTestOut] = []
 
+    timeout = settings.llm_request_timeout_seconds
     slots: list[tuple[ProviderName, LLMProvider | None]] = [
         (
             "gemini",
-            GeminiProvider(api_key=settings.llm_api_key, model=settings.llm_model)
+            GeminiProvider(
+                api_key=settings.llm_api_key,
+                model=settings.llm_model,
+                request_timeout_seconds=timeout,
+            )
             if settings.llm_api_key
             else None,
         ),
         (
             "groq",
-            GroqLLMProvider(api_key=settings.groq_api_key, model=settings.groq_model)
+            GroqLLMProvider(
+                api_key=settings.groq_api_key,
+                model=settings.groq_model,
+                request_timeout_seconds=timeout,
+            )
             if settings.groq_api_key
             else None,
         ),
@@ -49,7 +58,11 @@ async def test_all_providers(settings: Settings) -> list[LLMProviderTestOut]:
         # still be false if nothing is listening at ollama_base_url.
         (
             "ollama",
-            OllamaLLMProvider(base_url=settings.ollama_base_url, model=settings.ollama_model),
+            OllamaLLMProvider(
+                base_url=settings.ollama_base_url,
+                model=settings.ollama_model,
+                request_timeout_seconds=timeout,
+            ),
         ),
     ]
 
