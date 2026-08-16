@@ -51,13 +51,14 @@ def test_the_generator_itself_finds_a_sane_number_of_routes() -> None:
     assert len(found) >= _MIN_EXPECTED_ROUTES, found
 
 
-def test_every_covered_or_explained_route_accounts_for_every_generated_route() -> None:
+def test_known_uncovered_entries_still_match_a_real_route() -> None:
+    # KNOWN_UNCOVERED - found (not found - KNOWN_UNCOVERED, which is always empty by
+    # construction since the parametrize list below is itself built as found - KNOWN_
+    # UNCOVERED): catches a stale exception left behind after a route is renamed or
+    # removed, so a documented reason doesn't silently point at nothing.
     found = set(_all_routes())
-    accounted_for = found | set(KNOWN_UNCOVERED)
-    missing = found - accounted_for
-    assert missing == set(), (
-        f"New route(s) with no smoke coverage and no KNOWN_UNCOVERED reason: {missing}"
-    )
+    stale = set(KNOWN_UNCOVERED) - found
+    assert stale == set(), f"KNOWN_UNCOVERED entr(y/ies) no longer match a real route: {stale}"
 
 
 def _fill_path(path_template: str, workspace_id: str) -> str:

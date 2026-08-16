@@ -18,30 +18,35 @@ None.
 
 - Reuses `test_tenant_isolation.py`'s route-table traversal (`app.routes` →
   `route.original_router.routes`, filtered to methods `{"POST", "PATCH", "DELETE"}`
-  and paths containing `{workspace_id}`) to enumerate every mutating endpoint — 23
-  routes as of this phase, spanning workspaces/members/catalog/postmortems/incidents/
+  and paths containing `{workspace_id}`) to enumerate every mutating endpoint — 24
+  routes found as of this phase (23 covered by the generic case, 1 in
+  `KNOWN_UNCOVERED`), spanning workspaces/members/catalog/postmortems/incidents/
   apikeys/settings.
-- Confirmed empirically before writing any test code (see ADR): this FastAPI
-  version's dependency resolution runs the route's `Depends(require_role(...))` check
-  *before* both Pydantic body validation and any resource-id lookup — a `viewer`
-  session gets 403 for a mutating route even with an empty/missing JSON body and a
+- Confirmed empirically before writing any test code: this FastAPI version's
+  dependency resolution runs the route's `Depends(require_role(...))` check *before*
+  both Pydantic body validation and any resource-id lookup — a `viewer` session gets
+  403 for a mutating route even with an empty/missing JSON body and a
   syntactically-valid-but-nonexistent path-param UUID. This means the generated test
   needs no per-route fixture-creator registry (unlike `test_tenant_isolation.py`,
   which genuinely needs a real resource to test against workspace *B*'s inability to
   read it) — every case is: sign up an owner, demote to `viewer`, substitute
   `{workspace_id}` with the real one and every other path param with a fresh random
-  UUID, send an empty JSON body (or none, for routes that take none), assert 403.
-- A small, explicit `EXPECTED_MIN_ROUTES` meta-test guards the generator itself the
+  UUID, send an empty JSON body for every method except `DELETE` (which sends none),
+  assert 403.
+- A small, explicit `_MIN_EXPECTED_ROUTES` meta-test guards the generator itself the
   same way `test_tenant_isolation.py`'s does — a route-discovery regression that
-  silently found zero routes would make every case vacuously pass.
-- Because the role check wins over body validation regardless of a route's request
-  body shape (verified above, including for `POST .../catalog/import`'s nested
-  teams/services/edges payload), every mutating route the traversal finds is actually
-  coverable by the single generic case — there's no `KNOWN_UNCOVERED` entry in the
-  current route set. The `KNOWN_UNCOVERED` dict stays in the file empty but present
-  (mirroring `test_tenant_isolation.py`'s structure exactly), so a future route that
-  genuinely can't be tested this way has a documented place to go rather than
-  silently vanishing from the sweep or blocking the meta-test with no explanation.
+  silently found zero routes would make every case vacuously pass. A second meta-test,
+  `test_known_uncovered_entries_still_match_a_real_route`, asserts
+  `KNOWN_UNCOVERED - found == set()` — i.e. every documented exception still points at
+  a route that actually exists — catching a stale entry left behind after a route is
+  renamed or removed. (The reverse direction, `found - KNOWN_UNCOVERED`, is not worth
+  a separate assertion: the parametrized case list two lines below is itself built as
+  `found - KNOWN_UNCOVERED`, so a route missing from both is structurally impossible,
+  not something a runtime check could ever catch.)
+- One route (`POST .../brief/{brief_id}/feedback`) is deliberately in
+  `KNOWN_UNCOVERED`: it's gated by `CurrentWorkspaceMember`, not an owner/responder
+  role, so a viewer rating a brief "helpful" isn't an RBAC gap, it's the documented
+  contract.
 
 ### `backend/tests/test_api_smoke.py` (new) — every endpoint answers, on-contract
 
