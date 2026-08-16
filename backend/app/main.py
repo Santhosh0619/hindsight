@@ -20,8 +20,10 @@ from app.api.v1.search import router as search_router
 from app.api.v1.settings import router as settings_router
 from app.api.v1.workspaces import router as workspaces_router
 from app.core.config import get_settings
-from app.core.errors import AppError, app_error_handler
+from app.core.errors import AppError, app_error_handler, app_unhandled_exception_handler
 from app.core.logging import RequestIDMiddleware, configure_logging, get_logger
+from app.core.request_size import RequestSizeMiddleware
+from app.core.security_headers import SecurityHeadersMiddleware
 from app.db.init import ensure_vector_extension
 from app.db.session import dispose_engine, get_engine
 
@@ -58,16 +60,24 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="Hindsight API", version=__version__, lifespan=lifespan)
 
+    # Registration order matters here: Starlette wraps the *last*-added middleware
+    # outermost, so it runs first on the way in. RequestSizeMiddleware needs
+    # RequestIDMiddleware to have already bound request_id (for its own 413 body), so
+    # it's added first (innermost); CORSMiddleware stays outermost, unchanged from
+    # before this phase.
+    app.add_middleware(RequestSizeMiddleware, settings=settings)
+    app.add_middleware(SecurityHeadersMiddleware, settings=settings)
     app.add_middleware(RequestIDMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins_list,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_headers=["Content-Type", "Authorization", "X-API-Key"],
     )
 
     app.add_exception_handler(AppError, app_error_handler)
+    app.add_exception_handler(Exception, app_unhandled_exception_handler)
 
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(workspaces_router, prefix="/api/v1")
