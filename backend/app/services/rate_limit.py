@@ -35,3 +35,14 @@ demo_signup_bucket = TokenBucket(capacity=5, refill_seconds=12 * 60)
 # guest session can trigger via brief generation -- independent of demo_signup_bucket,
 # which only bounds how many guest sessions one IP can mint in the first place.
 demo_brief_bucket = TokenBucket(capacity=10, refill_seconds=10 * 60)
+
+# Phase 14 hardening -- see docs/modules/phase-14-hardening/FRD.md "Rate limiting".
+# Shared by /auth/login and /auth/signup -- both are cheap-to-call, unauthenticated
+# endpoints doing real password work per call, the same credential-stuffing/signup-spam
+# threat model. Deliberately excludes /auth/refresh -- see auth.py's own comment.
+login_bucket = TokenBucket(capacity=30, refill_seconds=60)
+
+# Keyed by workspace_id, not caller -- a workspace's aggregate brief-generation rate is
+# the thing worth bounding, independent of demo_brief_bucket (which bounds a single
+# demo guest session's own usage, keyed by user id).
+brief_bucket = TokenBucket(capacity=20, refill_seconds=60)
