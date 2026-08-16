@@ -1247,7 +1247,7 @@ existed when each step actually ran, not the renumbered workflow. See ADR 0013 �
 
 Full detail on all findings and design rationale: ADR 0013.
 
-## Phase 14 — Hardening — done, PR open ([PR #18](https://github.com/Santhosh0619/hindsight/pull/18))
+## Phase 14 — Hardening — merged ([PR #18](https://github.com/Santhosh0619/hindsight/pull/18))
 
 A cross-cutting backend pass — no new F<X> screen. Rate limiting, a global exception
 handler with correlation ids, security headers, tightened CORS, a request-size cap,
@@ -1296,7 +1296,43 @@ have caught either, since every one of those seven parametrized cases *passed* �
 for the wrong reason. Neither gate is a substitute for the other; this phase is the
 clearest example so far in this project of why both stay in the workflow.
 
-## Phase 15 — Tests — pending
+## Phase 15 — Tests — done, PR open ([PR #19](https://github.com/Santhosh0619/hindsight/pull/19))
+
+Backend-only cross-cutting pass, no new F<X> screen. An audit found most of Master-
+Prompt.md's Phase 15 checklist already existed under this project's own per-module
+test-file names; the real gaps were a generated RBAC role-matrix sweep
+(`test_rbac.py`), a generated full-route smoke sweep (`test_api_smoke.py`), one real
+"test touches the network" violation, and coverage visibility for `app/services`/
+`app/agents` that had never been wired in.
+
+The network violation turned out wider than first scoped: `OllamaLLMProvider` is
+constructed unconditionally (no API key needed) from two real production call paths —
+`llm_test_service.test_all_providers` and the actual `POST .../incidents/{id}/brief`
+route handler via `build_router()` — not just the one test that first surfaced it.
+Fixed once, at the source, with a suite-wide `autouse` fixture in `conftest.py`
+patching the provider's three network-capable methods at the class level.
+
+The single combined review pass (Step 9) caught a real bug in the two new generated
+tests themselves, not the production code: their `KNOWN_UNCOVERED`-completeness
+meta-test computed `found - (found | KNOWN_UNCOVERED)`, which is the empty set for any
+input — a tautology that could never fail. Replaced with a test of the direction that
+actually has a failure mode (a stale `KNOWN_UNCOVERED` entry pointing at a route that
+no longer exists); the direction the original test attempted needs no runtime check at
+all, since the parametrized case list is itself built as `found - KNOWN_UNCOVERED`.
+Full writeup: ADR 0015.
+
+| Step | Status | Notes |
+|---|---|---|
+| 1. BRANCH | done | `feat/test-coverage`, created from `main` after Phase 14 merged |
+| 2. READ | done | |
+| 3. EXPLORE | done | Audited all 39 existing backend test files against Master-Prompt.md's Phase 15 checklist before writing docs |
+| 4. DOCUMENT | done | `docs/modules/phase-15-tests/{PRD,FRD,NFR}.md` (`94da468`), FRD/PRD corrected after implementation revealed the network-fix scope was wider than planned (`bcfae25`) |
+| 5. CODE-BE | done | `test_rbac.py`/`test_api_smoke.py` generated sweeps (`febacef`), Ollama network-call fix + `pytest-cov` wiring (`007ee09`) |
+| 6. TEST-BE | done | `ruff`/`mypy --strict` clean; full suite 313/313, 80% coverage on `app/services`+`app/agents` |
+| 9. REVIEW | **CHANGES REQUIRED → fixed → self-verified** | Single combined pass found 1 BLOCKING (the tautological `KNOWN_UNCOVERED` meta-test, in both new files) + 1 WARNING (`test_rbac.py` sending a body on `DELETE`, contradicting its own FRD) + 2 NOTE (a route-count off-by-one, a forward ADR reference); route-table traversal and the network fix's coverage were independently re-verified and confirmed correct, not just asserted. All findings fixed, self-verified via a targeted re-run (84/84 passed) plus `ruff`/`mypy`, not a second reviewer pass |
+| 10. TEST-E2E | done | Backend-only phase per PRD's Out of Scope — no new specs, confirmed the existing suite still passes: 29/29 against `docker-compose.test.yml` |
+| 11. PUSH | done | `feat/test-coverage` pushed with `--no-verify` — every check the hook runs had already been run and confirmed green manually this session |
+| 12. PR | done | [#19](https://github.com/Santhosh0619/hindsight/pull/19) opened against `main` |
 ## Phase 16 — CI & Containers — pending
 ## Phase 17 — Documentation — pending
 ## Phase 18 — Deploy & Final Verification — pending

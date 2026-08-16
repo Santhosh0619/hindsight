@@ -65,6 +65,26 @@ def _reset_rate_limit_buckets() -> None:
 
 
 @pytest.fixture(autouse=True)
+def _prevent_real_ollama_network_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    # No test may touch the network (Master-Prompt.md's Phase 15 checkpoint).
+    # OllamaLLMProvider is *always* constructed regardless of whether an LLM key is
+    # configured (Ollama needs none) -- both build_router() (called for real inside
+    # the actual POST .../incidents/{id}/brief route handler, not just LLM-specific
+    # unit tests) and llm_test_service.test_all_providers() build a real one. Patching
+    # the three LLMProvider protocol methods at the class level (not per-module import
+    # site) closes every call path in one place, rather than requiring every test file
+    # that happens to exercise one of those routes to remember its own mock.
+    from app.services.llm.ollama import OllamaLLMProvider
+
+    async def _fail(self: object, *args: object, **kwargs: object) -> None:
+        raise ConnectionError("mocked: nothing listening at ollama_base_url")
+
+    monkeypatch.setattr(OllamaLLMProvider, "complete", _fail)
+    monkeypatch.setattr(OllamaLLMProvider, "structured", _fail)
+    monkeypatch.setattr(OllamaLLMProvider, "structured_with_usage", _fail)
+
+
+@pytest.fixture(autouse=True)
 async def _reset_db_engine() -> AsyncGenerator[None, None]:
     # app.db.session caches the AsyncEngine/session factory at module scope, bound to
     # whatever event loop was running when it was first created. pytest-asyncio gives

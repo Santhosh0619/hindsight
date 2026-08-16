@@ -17,7 +17,10 @@ async def test_llm_test_reports_unconfigured_slots_without_calling_them(
 ) -> None:
     # No LLM key is configured in this build session (standing choice since Phase 6) --
     # gemini/groq must report configured=false with no attempt made; ollama is always
-    # "configured" (no key required) but its own reachability is independently real.
+    # "configured" (no key required) but its own reachability is independently real --
+    # against a mocked provider, per conftest.py's suite-wide
+    # _prevent_real_ollama_network_calls fixture (Phase 15), so this never opens a
+    # real socket, even a local, fast-failing one to ollama_base_url.
     owner = await signup(client)
     token = owner["access_token"]
     workspace_id = await _workspace_id(client, token)
