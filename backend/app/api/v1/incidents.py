@@ -32,7 +32,7 @@ from app.schemas.incident_api import (
 from app.services import incidents_service
 from app.services.llm.router import build_router
 from app.services.postgres_graph_store import PostgresGraphStore
-from app.services.rate_limit import demo_brief_bucket
+from app.services.rate_limit import brief_bucket, demo_brief_bucket
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/incidents", tags=["incidents"])
 
@@ -47,6 +47,13 @@ OwnerOrResponderOrDemo = Annotated[
 def _check_demo_brief_rate_limit(current_user: User) -> None:
     if current_user.is_demo and not demo_brief_bucket.consume(str(current_user.id)):
         raise RateLimitedError("Too many briefs generated — try again shortly")
+
+
+def _check_workspace_brief_rate_limit(workspace_id: uuid.UUID) -> None:
+    # Independent of _check_demo_brief_rate_limit -- this bounds a workspace's
+    # aggregate brief-generation rate, not one demo guest's own usage.
+    if not brief_bucket.consume(str(workspace_id)):
+        raise RateLimitedError("Too many briefs generated for this workspace — try again shortly")
 
 
 @router.post("", response_model=IncidentOut, status_code=status.HTTP_201_CREATED)
@@ -121,6 +128,7 @@ async def generate_brief(
     db: DbSession,
 ) -> BriefOut:
     _check_demo_brief_rate_limit(current_user)
+    _check_workspace_brief_rate_limit(workspace_id)
     incident = await incidents_service.get_incident(db, workspace_id, incident_id)
     graph_store = PostgresGraphStore(db)
     router_ = build_router(get_settings())
@@ -136,6 +144,7 @@ async def stream_brief(
     db: DbSession,
 ) -> EventSourceResponse:
     _check_demo_brief_rate_limit(current_user)
+    _check_workspace_brief_rate_limit(workspace_id)
     # `db` (FastAPI's request-scoped session) is closed by the dependency's own
     # AsyncExitStack as soon as this handler returns the response object -- before
     # Starlette ever starts iterating the SSE body. The generator below must own a

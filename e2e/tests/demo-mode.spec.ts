@@ -7,14 +7,13 @@ import { test, expect } from "@playwright/test";
 const PRECOMPUTED_INCIDENT_TITLE = "Checkout is throwing 500s, database looks maxed out";
 
 async function loginAsDemoGuest(page: import("@playwright/test").Page): Promise<void> {
-  // A distinct X-Forwarded-For per call gives each demo login its own
-  // demo_signup_bucket key (app/services/rate_limit.py), isolated from every other
-  // test -- and, since it's randomized rather than a small sequential counter, from
-  // repeat runs of this same file within the bucket's 12-minute refill window too
-  // (a fixed counter collides with itself across reruns while iterating).
-  await page.context().setExtraHTTPHeaders({
-    "X-Forwarded-For": `203.0.113.${Math.floor(Math.random() * 254) + 1}`,
-  });
+  // No X-Forwarded-For spoofing here (a prior version of this helper set one to give
+  // each call its own demo_signup_bucket key) -- Phase 14 hardening tightened CORS's
+  // allow_headers to the exact set the real frontend ever sends, and X-Forwarded-For
+  // isn't one of them on purpose: a browser client should never be able to set the
+  // header the server's own IP-based rate limiting trusts, or any cross-origin page's
+  // JS could spoof it to bypass that limiting entirely. demo_signup_bucket's capacity
+  // is sized with headroom for this file's own real call volume instead.
   await page.goto("/");
   await page.getByRole("button", { name: "Try the live demo" }).click();
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });

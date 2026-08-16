@@ -12,7 +12,7 @@ from app.schemas.auth import (
     UserOut,
 )
 from app.services import auth_service
-from app.services.rate_limit import demo_signup_bucket
+from app.services.rate_limit import demo_signup_bucket, login_bucket
 from app.services.workspace_service import list_my_workspaces
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -38,8 +38,24 @@ def _set_refresh_cookie(response: Response, raw_token: str) -> None:
     )
 
 
+def _check_login_rate_limit(request: Request) -> None:
+    # login and signup share one bucket -- both are cheap-to-call, unauthenticated
+    # endpoints doing real password work per call, the same threat model (credential
+    # stuffing / signup spam). Deliberately NOT applied to /refresh: refresh isn't
+    # brute-forceable (it requires an already-valid signed cookie, not a guessable
+    # credential) and is already protected by single-use rotation + reuse detection
+    # (Phase 2); it also fires on every page load's boot-time session restore, so
+    # rate-limiting it would throttle ordinary multi-tab/frequent-navigation usage for
+    # no real security benefit.
+    if not login_bucket.consume(_client_ip(request)):
+        raise RateLimitedError("Too many attempts — try again shortly")
+
+
 @router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-async def signup(payload: SignupRequest, db: DbSession, response: Response) -> AuthResponse:
+async def signup(
+    request: Request, payload: SignupRequest, db: DbSession, response: Response
+) -> AuthResponse:
+    _check_login_rate_limit(request)
     user, access_token, raw_refresh = await auth_service.signup(
         db, email=payload.email, password=payload.password, full_name=payload.full_name
     )
@@ -48,7 +64,10 @@ async def signup(payload: SignupRequest, db: DbSession, response: Response) -> A
 
 
 @router.post("/login", response_model=AuthResponse)
-async def login(payload: LoginRequest, db: DbSession, response: Response) -> AuthResponse:
+async def login(
+    request: Request, payload: LoginRequest, db: DbSession, response: Response
+) -> AuthResponse:
+    _check_login_rate_limit(request)
     user, access_token, raw_refresh = await auth_service.login(
         db, email=payload.email, password=payload.password
     )

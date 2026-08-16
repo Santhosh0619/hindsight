@@ -44,6 +44,13 @@ class Settings(BaseSettings):
     critic_threshold: float = 0.7
     max_correction_passes: int = 2
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
+    # Phase 14 hardening — see docs/modules/phase-14-hardening/NFR.md "Constraints".
+    # Must stay comfortably above max_upload_bytes (a legitimate postmortem's raw_text
+    # can be right up against that 10MB field cap, plus JSON structure overhead) --
+    # this is an outer defense-in-depth boundary, not meant to be tighter than the
+    # field-level cap it wraps.
+    max_request_bytes: int = 15_728_640
+    llm_request_timeout_seconds: int = 30
 
     @property
     def cors_origins_list(self) -> list[str]:

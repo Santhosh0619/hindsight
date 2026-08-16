@@ -46,6 +46,25 @@ def _setup_checkpointer_schema() -> None:
 
 
 @pytest.fixture(autouse=True)
+def _reset_rate_limit_buckets() -> None:
+    # login_bucket/brief_bucket/demo_signup_bucket/demo_brief_bucket are module-level
+    # singletons shared across the whole pytest process, not per-test state -- almost
+    # every test in this suite calls signup()/login() as its own setup step, so without
+    # a reset here the shared login_bucket empties partway through a full-suite run and
+    # every later test's signup() starts getting a real 429, cascading into unrelated
+    # failures across dozens of files that have nothing to do with rate limiting.
+    from app.services.rate_limit import (
+        brief_bucket,
+        demo_brief_bucket,
+        demo_signup_bucket,
+        login_bucket,
+    )
+
+    for bucket in (login_bucket, brief_bucket, demo_brief_bucket, demo_signup_bucket):
+        bucket._buckets.clear()
+
+
+@pytest.fixture(autouse=True)
 async def _reset_db_engine() -> AsyncGenerator[None, None]:
     # app.db.session caches the AsyncEngine/session factory at module scope, bound to
     # whatever event loop was running when it was first created. pytest-asyncio gives

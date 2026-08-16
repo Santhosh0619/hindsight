@@ -2,7 +2,7 @@ import uuid
 
 from httpx import AsyncClient
 
-from app.services.rate_limit import TokenBucket
+from app.services.rate_limit import TokenBucket, demo_signup_bucket
 from tests.conftest import auth_headers, signup, unique_email
 
 
@@ -55,7 +55,12 @@ async def test_login_wrong_password_and_unknown_email_give_same_error(
 
     assert wrong_password.status_code == 401
     assert unknown_email.status_code == 401
-    assert wrong_password.json() == unknown_email.json()
+    # request_id is legitimately unique per request (Phase 14 hardening) -- everything
+    # else in the envelope must still be identical, or the message itself becomes a
+    # user-enumeration tell.
+    assert wrong_password.json()["error"]["code"] == unknown_email.json()["error"]["code"]
+    assert wrong_password.json()["error"]["message"] == unknown_email.json()["error"]["message"]
+    assert wrong_password.json()["error"]["detail"] == unknown_email.json()["error"]["detail"]
 
 
 async def test_me_returns_user_and_memberships(client: AsyncClient) -> None:
@@ -103,8 +108,16 @@ async def test_refresh_reuse_revokes_the_whole_family(client: AsyncClient) -> No
 
     # Reuse must not be distinguishable from any other refresh failure by message —
     # otherwise the error text itself becomes the "this token was reused" tell the
-    # NFR forbids.
-    assert reuse_response.json() == also_revoked_response.json()
+    # NFR forbids. request_id is legitimately unique per request (Phase 14 hardening),
+    # excluded from this comparison on purpose.
+    assert reuse_response.json()["error"]["code"] == also_revoked_response.json()["error"]["code"]
+    assert (
+        reuse_response.json()["error"]["message"]
+        == also_revoked_response.json()["error"]["message"]
+    )
+    assert (
+        reuse_response.json()["error"]["detail"] == also_revoked_response.json()["error"]["detail"]
+    )
 
 
 async def test_refresh_without_cookie_is_unauthorized(client: AsyncClient) -> None:
@@ -149,11 +162,17 @@ async def test_demo_endpoint_rate_limits_by_ip(client: AsyncClient) -> None:
     # rate limiter.
     headers = {"X-Forwarded-For": f"203.0.113.{uuid.uuid4().int % 250}"}
 
-    responses = [await client.post("/api/v1/auth/demo", headers=headers) for _ in range(6)]
+    # +1 past capacity, read from the real bucket rather than a hardcoded copy of it --
+    # a capacity change (as already happened once this phase) shouldn't silently stop
+    # testing the real boundary.
+    capacity = demo_signup_bucket._capacity
+    responses = [
+        await client.post("/api/v1/auth/demo", headers=headers) for _ in range(capacity + 1)
+    ]
 
-    assert [r.status_code for r in responses[:5]] == [200] * 5
-    assert responses[5].status_code == 429
-    assert responses[5].json()["error"]["code"] == "rate_limited"
+    assert [r.status_code for r in responses[:capacity]] == [200] * capacity
+    assert responses[capacity].status_code == 429
+    assert responses[capacity].json()["error"]["code"] == "rate_limited"
 
 
 def test_token_bucket_blocks_after_capacity_is_exhausted() -> None:

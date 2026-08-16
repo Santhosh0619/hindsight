@@ -1,5 +1,10 @@
+import structlog
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
+
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class AppError(Exception):
@@ -60,6 +65,20 @@ class LLMUnavailableError(AppError):
     code = "llm_unavailable"
 
 
+class RequestTooLargeError(AppError):
+    status_code = status.HTTP_413_CONTENT_TOO_LARGE
+    code = "request_too_large"
+
+
+def get_request_id() -> str | None:
+    # RequestIDMiddleware (app/core/logging.py) binds this to structlog's contextvars
+    # at the start of every request -- reading it back here (rather than threading a
+    # request_id parameter through every raise site) is what lets both error handlers
+    # below share one envelope shape without either one drifting from the other.
+    request_id = structlog.contextvars.get_contextvars().get("request_id")
+    return request_id if isinstance(request_id, str) else None
+
+
 async def app_error_handler(request: Request, exc: Exception) -> JSONResponse:
     assert isinstance(exc, AppError)
     return JSONResponse(
@@ -69,6 +88,26 @@ async def app_error_handler(request: Request, exc: Exception) -> JSONResponse:
                 "code": exc.code,
                 "message": exc.message,
                 "detail": exc.detail,
+                "request_id": get_request_id(),
+            }
+        },
+    )
+
+
+async def app_unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    # Anything not raised as a typed AppError is, by definition, a bug -- log it with
+    # the full traceback and the request's correlation id server-side, but the client
+    # only ever sees a generic message. Never echo exc's own message/type: that's
+    # exactly the internals this handler exists to keep off the wire.
+    logger.exception("unhandled_exception", request_id=get_request_id())
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "error": {
+                "code": "internal_error",
+                "message": "An unexpected error occurred",
+                "detail": None,
+                "request_id": get_request_id(),
             }
         },
     )
