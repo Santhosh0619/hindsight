@@ -2,7 +2,7 @@ import uuid
 
 from httpx import AsyncClient
 
-from app.services.rate_limit import TokenBucket
+from app.services.rate_limit import TokenBucket, demo_signup_bucket
 from tests.conftest import auth_headers, signup, unique_email
 
 
@@ -162,11 +162,17 @@ async def test_demo_endpoint_rate_limits_by_ip(client: AsyncClient) -> None:
     # rate limiter.
     headers = {"X-Forwarded-For": f"203.0.113.{uuid.uuid4().int % 250}"}
 
-    responses = [await client.post("/api/v1/auth/demo", headers=headers) for _ in range(6)]
+    # +1 past capacity, read from the real bucket rather than a hardcoded copy of it --
+    # a capacity change (as already happened once this phase) shouldn't silently stop
+    # testing the real boundary.
+    capacity = demo_signup_bucket._capacity
+    responses = [
+        await client.post("/api/v1/auth/demo", headers=headers) for _ in range(capacity + 1)
+    ]
 
-    assert [r.status_code for r in responses[:5]] == [200] * 5
-    assert responses[5].status_code == 429
-    assert responses[5].json()["error"]["code"] == "rate_limited"
+    assert [r.status_code for r in responses[:capacity]] == [200] * capacity
+    assert responses[capacity].status_code == 429
+    assert responses[capacity].json()["error"]["code"] == "rate_limited"
 
 
 def test_token_bucket_blocks_after_capacity_is_exhausted() -> None:
