@@ -1247,7 +1247,55 @@ existed when each step actually ran, not the renumbered workflow. See ADR 0013 �
 
 Full detail on all findings and design rationale: ADR 0013.
 
-## Phase 14 — Hardening — pending
+## Phase 14 — Hardening — done, PR open
+
+A cross-cutting backend pass — no new F<X> screen. Rate limiting, a global exception
+handler with correlation ids, security headers, tightened CORS, a request-size cap,
+explicit LLM-call timeouts, a verified (not assumed) N+1 audit, and a generated
+cross-tenant-isolation sweep over the app's own route table.
+
+Two review cycles this phase, both worth recording. The first (code review) caught a
+real bug in the generated tenant-isolation test itself — it built its HTTP request
+from an unprefixed path template, so every case 404'd on Starlette's own generic
+"route not found" regardless of whether the app's real `workspace_id` filtering
+worked, passing all seven parametrized cases vacuously. The same review pass also
+raised a second finding claiming the route-discovery mechanism never finds any routes
+at all in this FastAPI version — directly contradicted by rerunning the exact
+traversal against the live app a third time and getting the same 58 real routes back;
+dismissed as a false positive rather than "fixed." The second cycle (the full e2e
+suite) caught two more real bugs the unit-test suite couldn't: `login_bucket`'s first
+capacity (30/60s) measurably exhausted mid-run against the e2e suite's real call
+volume (dozens of signups/logins from one shared IP in ~2 minutes — a real, measured
+traffic shape, not a hypothetical one), and two e2e specs relied on spoofing
+`X-Forwarded-For` to dodge the demo-login rate limit, which Phase 14's own tightened
+CORS correctly started blocking — fixed by removing the spoofing (a real browser
+should never be allowed to set the header an IP-based rate limiter trusts) rather than
+loosening CORS to accommodate it. Full writeup: ADR 0014.
+
+| Step | Status | Notes |
+|---|---|---|
+| 1. BRANCH | done | `feat/hardening`, created from `main` after Phase 13 merged |
+| 2. READ | done | |
+| 3. EXPLORE | done | Read every existing rate-limit/CORS/exception-handler/middleware/LLM-provider-construction site and every list-returning service function across the codebase before writing docs — the N+1 "audit" is this exploration, not a separate step |
+| 4. DOCUMENT | done | `docs/modules/phase-14-hardening/{PRD,FRD,NFR}.md` (`f7352f9`), corrected twice more as implementation surfaced real design mistakes in the first draft (see below) |
+| 5. CODE-BE | done | Rate limiting (`346879a`), global exception handler (`3887372`), security headers/CORS/request-size cap (`fc18172`), LLM call timeouts (`23bc978`) |
+| 6. TEST-BE | done | `ruff`/`mypy --strict` clean; full suite 229/229 (up from 207) |
+| 9. REVIEW | **CHANGES REQUIRED → fixed → self-verified** | Single combined pass (this project's new one-review-per-phase process, see Phase 13's own workflow-change note) found 2 BLOCKING + 4 NOTE findings in the generated tenant-isolation test and doc wording; one BLOCKING finding was independently verified false and not applied (see above); the real one and all four NOTEs fixed (`23e5a0d`), self-verified via re-run rather than re-spawning the reviewer, per the updated CLAUDE.md process |
+| 10. TEST-E2E | done | Full suite 29/29 — two real failures found and fixed along the way (`aa01108`), not pre-existing flakes |
+| 11. PUSH | pending | |
+| 12. PR | pending | |
+
+### Two review passes, two categories of finding neither could catch alone
+
+The unit-test suite (229 tests) never exercises the app from outside its own process
+with real concurrent multi-user traffic — the `login_bucket` exhaustion and the CORS/
+`X-Forwarded-For` interaction were both invisible to it by construction, only
+surfacing once the real e2e suite hit the real running server. Conversely, code review
+caught a logic bug (the missing `/api/v1` prefix) that e2e's own tests never would
+have caught either, since every one of those seven parametrized cases *passed* — just
+for the wrong reason. Neither gate is a substitute for the other; this phase is the
+clearest example so far in this project of why both stay in the workflow.
+
 ## Phase 15 — Tests — pending
 ## Phase 16 — CI & Containers — pending
 ## Phase 17 — Documentation — pending
