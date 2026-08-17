@@ -320,15 +320,23 @@ async def _enrich_brief(db: AsyncSession, brief_row: Brief, *, workspace_id: uui
         if step.citation is not None:
             chunk_ids.add(step.citation.chunk_id)
 
-    postmortem_ids: set[uuid.UUID] = {c.postmortem_id for c in citations}
-    postmortem_ids.update(m.postmortem_id for m in matched)
-
     chunk_by_id: dict[uuid.UUID, PostmortemChunk] = {}
     if chunk_ids:
         chunk_result = await db.execute(
             select(PostmortemChunk).where(PostmortemChunk.id.in_(chunk_ids))
         )
         chunk_by_id = {c.id: c for c in chunk_result.scalars().all()}
+
+    # postmortem_id is resolved from the chunk's own FK below, never trusted from the
+    # citation the analyst produced -- the analyst prompt only ever shows the model a
+    # chunk's postmortem *title* (analyst_agent.py's <chunk postmortem="{title}">), not
+    # its id, so Citation.postmortem_id is a field the model was never given the real
+    # value for and can't reliably reproduce (observed defaulting to an all-zero
+    # placeholder UUID in practice, silently dropping every hypothesis whose citation
+    # resolution depended on it matching). The server already knows which postmortem
+    # each chunk belongs to; there's no reason to ask the model to guess it.
+    postmortem_ids: set[uuid.UUID] = {c.postmortem_id for c in chunk_by_id.values()}
+    postmortem_ids.update(m.postmortem_id for m in matched)
 
     postmortem_by_id: dict[uuid.UUID, Postmortem] = {}
     if postmortem_ids:
@@ -339,12 +347,14 @@ async def _enrich_brief(db: AsyncSession, brief_row: Brief, *, workspace_id: uui
 
     def _citation_out(citation: Citation) -> CitationOut | None:
         chunk = chunk_by_id.get(citation.chunk_id)
-        postmortem = postmortem_by_id.get(citation.postmortem_id)
-        if chunk is None or postmortem is None:
+        if chunk is None:
+            return None
+        postmortem = postmortem_by_id.get(chunk.postmortem_id)
+        if postmortem is None:
             return None
         return CitationOut(
             chunk_id=citation.chunk_id,
-            postmortem_id=citation.postmortem_id,
+            postmortem_id=chunk.postmortem_id,
             postmortem_title=postmortem.title,
             quote=citation.quote,
             content=chunk.content,
