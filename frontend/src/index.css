@@ -95,4 +95,20 @@
   .animate-drift-slow {
     animation: drift 32s ease-in-out infinite reverse;
   }
+
+  @keyframes edge-pulse {
+    from {
+      stroke-dashoffset: 1;
+    }
+    to {
+      stroke-dashoffset: -1.06;
+    }
+  }
+
+  /* Requires the target <line>/<path> to have pathLength="1" and a matching
+     stroke-dasharray (see TechBackground.tsx) -- normalizes the sweep to the path's
+     own length regardless of its real on-screen size. */
+  .animate-edge-pulse {
+    animation: edge-pulse linear infinite;
+  }
 }

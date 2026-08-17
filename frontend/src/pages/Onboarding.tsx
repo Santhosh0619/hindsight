@@ -19,7 +19,7 @@ export function Onboarding(): React.JSX.Element {
         </div>
 
         <div className="mx-auto w-full max-w-sm">
-          <Card className="border-border/60 bg-card/70 backdrop-blur-md">
+          <Card className="border-border/60 bg-card/70 shadow-[0_0_50px_-16px_var(--color-accent)] backdrop-blur-md">
             <CardHeader>
               <CardTitle>Start empty</CardTitle>
               <CardDescription>

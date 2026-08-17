@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import { Logomark } from "@/components/layout/Logomark";
 import { TechBackground } from "@/components/layout/TechBackground";
 import { Button } from "@/components/ui/button";
 import { useAuth, ApiError } from "@/lib/auth";
@@ -28,8 +29,11 @@ export function Landing(): React.JSX.Element {
     <div className="relative flex min-h-screen flex-col text-foreground">
       <TechBackground />
 
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">
-        <span className="text-lg font-semibold tracking-tight">Hindsight</span>
+      <header className="relative mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">
+        <span className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+          <Logomark className="h-6 w-6" />
+          Hindsight
+        </span>
         <nav className="flex items-center gap-2">
           <Button asChild variant="ghost" size="sm">
             <Link to="/login">Log in</Link>
@@ -38,11 +42,12 @@ export function Landing(): React.JSX.Element {
             <Link to="/signup">Sign up</Link>
           </Button>
         </nav>
+        <div className="absolute inset-x-6 bottom-0 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
       </header>
 
       <main className="mx-auto flex max-w-3xl flex-1 flex-col items-center justify-center gap-8 px-6 py-24 text-center">
-        <div className="inline-flex items-center gap-2 self-center rounded-full border border-border/60 bg-card/50 px-3 py-1 text-xs text-muted-foreground backdrop-blur-sm">
-          <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+        <div className="inline-flex items-center gap-2 self-center rounded-full border border-border/60 bg-card/50 px-3 py-1 text-xs text-muted-foreground shadow-[0_0_20px_-8px_var(--color-accent)] backdrop-blur-sm">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent shadow-[0_0_6px_1px_var(--color-accent)]" />
           Hybrid vector + keyword + graph retrieval
         </div>
 
