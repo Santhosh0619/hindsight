@@ -21,11 +21,23 @@ class Settings(BaseSettings):
     # LLM — all optional, the app must fully function without any key
     llm_provider: str = "gemini"
     llm_api_key: str | None = None
-    llm_model: str = "gemini-2.5-flash"
+    # gemini-2.5-flash (the original default) is confirmed 404 for new accounts --
+    # verified against a real key hitting Google's own generativelanguage API, whose
+    # error body says exactly that. gemini-flash-latest resolves but returned a
+    # persistent 503 "high demand" on this free-tier key across repeated attempts.
+    # gemini-flash-lite-latest is the one that actually completed both a plain and a
+    # structured call reliably in the same session -- verified with real calls, not
+    # assumed from the model just being listed.
+    llm_model: str = "gemini-flash-lite-latest"
     groq_api_key: str | None = None
     # Free-tier model IDs move fast (Phase 0's ADR) -- re-verify against the provider
     # before relying on these for a live call, same caution as `llm_model` above.
-    groq_model: str = "llama-3.3-70b-versatile"
+    # llama-3.3-70b-versatile (the original default) was confirmed retired by querying
+    # https://api.groq.com/openai/v1/models directly with a real key -- Groq's current
+    # lineup has no Llama chat models at all. gpt-oss-20b is the current fast/free-tier
+    # general-purpose model with tool-calling and structured-output support, which this
+    # project's structured() calls need.
+    groq_model: str = "openai/gpt-oss-20b"
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3"
 

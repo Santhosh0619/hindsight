@@ -141,7 +141,9 @@ export function BriefView({
         <CardContent className="flex flex-col gap-4">
           {brief.hypotheses.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No hypotheses — this brief is deterministic-only.
+              {brief.llm_used
+                ? "No hypotheses were generated for this incident."
+                : "No hypotheses — this brief is deterministic-only."}
             </p>
           ) : (
             brief.hypotheses.map((h, i) => (
