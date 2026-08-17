@@ -467,7 +467,7 @@ structured events.
 Full detail on both findings and the design rationale behind the queue's reclaim/
 backoff semantics: ADR 0005.
 
-## Phase 6 — Extraction Agents (Pydantic AI) — done, PR open
+## Phase 6 — Extraction Agents (Pydantic AI) — merged ([PR #7](https://github.com/Santhosh0619/hindsight/pull/7))
 
 Target checkpoint (Master-Prompt.md): ingest 3 postmortems; `postmortem_facts`,
 `postmortem_services`, and `postmortem_failure_modes` are populated; a deliberately
@@ -547,7 +547,7 @@ cleanly with `"All LLM providers unavailable"` and dead-lettered after retrying.
 
 Full detail on all findings and design rationale: ADR 0006.
 
-## Phase 7 — Hybrid Retrieval — done, PR open ([PR #8](https://github.com/Santhosh0619/hindsight/pull/8))
+## Phase 7 — Hybrid Retrieval — merged ([PR #8](https://github.com/Santhosh0619/hindsight/pull/8))
 
 Target checkpoint (Master-Prompt.md): query the same corpus in `vector`/`keyword`/
 `graph`/`hybrid` mode and get visibly different, correctly-attributed result sets;
@@ -647,7 +647,7 @@ cross-workspace isolation, and the unauthenticated redirect.
 
 Full detail on all findings and design rationale: ADR 0007.
 
-## Phase 8 — LangGraph Agent Pipeline — done, PR open ([PR #9](https://github.com/Santhosh0619/hindsight/pull/9))
+## Phase 8 — LangGraph Agent Pipeline — merged ([PR #9](https://github.com/Santhosh0619/hindsight/pull/9))
 
 Target checkpoint (Master-Prompt.md): feed a seeded alert through the compiled graph in
 a script; all six nodes fire in order; force a low score and observe exactly one
@@ -746,7 +746,7 @@ against a real graph run, which is what caught this phase's one genuine concurre
 
 Full detail on all findings and design rationale: ADR 0008.
 
-## Phase 9 — Incidents API + The Money Screen — done, PR open ([PR #10](https://github.com/Santhosh0619/hindsight/pull/10))
+## Phase 9 — Incidents API + The Money Screen — merged ([PR #10](https://github.com/Santhosh0619/hindsight/pull/10))
 
 Target checkpoint (Master-Prompt.md): file an incident, watch the agent pipeline
 investigate it live, land on a brief with hypotheses, citations, matched postmortems,
@@ -852,7 +852,7 @@ written, which is what actually surfaced this phase's CRLF SSE-framing bug (belo
 
 Full detail on all findings and design rationale: ADR 0009.
 
-## Phase 10 — Service Map, Knowledge Base, Dashboard — done, PR open ([PR #11](https://github.com/Santhosh0619/hindsight/pull/11))
+## Phase 10 — Service Map, Knowledge Base, Dashboard — merged ([PR #11](https://github.com/Santhosh0619/hindsight/pull/11))
 
 Target checkpoint (Master-Prompt.md): all three screens work against seeded data and
 are usable on a laptop screen without horizontal scrolling.
@@ -1296,7 +1296,7 @@ have caught either, since every one of those seven parametrized cases *passed* �
 for the wrong reason. Neither gate is a substitute for the other; this phase is the
 clearest example so far in this project of why both stay in the workflow.
 
-## Phase 15 — Tests — done, PR open ([PR #19](https://github.com/Santhosh0619/hindsight/pull/19))
+## Phase 15 — Tests — merged ([PR #19](https://github.com/Santhosh0619/hindsight/pull/19))
 
 Backend-only cross-cutting pass, no new F<X> screen. An audit found most of Master-
 Prompt.md's Phase 15 checklist already existed under this project's own per-module
