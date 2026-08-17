@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
+import { Logomark } from "@/components/layout/Logomark";
 import { TechBackground } from "@/components/layout/TechBackground";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,10 +55,14 @@ export function Login(): React.JSX.Element {
   return (
     <div className="relative flex min-h-screen items-center justify-center px-4">
       <TechBackground />
-      <Link to="/" className="absolute left-6 top-6 text-sm font-semibold tracking-tight">
+      <Link
+        to="/"
+        className="absolute left-6 top-6 flex items-center gap-2 text-sm font-semibold tracking-tight"
+      >
+        <Logomark />
         Hindsight
       </Link>
-      <Card className="w-full max-w-sm border-border/60 bg-card/70 backdrop-blur-md">
+      <Card className="w-full max-w-sm border-border/60 bg-card/70 shadow-[0_0_50px_-16px_var(--color-accent)] backdrop-blur-md">
         <CardHeader>
           <CardTitle>Log in</CardTitle>
           <CardDescription>Welcome back to Hindsight.</CardDescription>

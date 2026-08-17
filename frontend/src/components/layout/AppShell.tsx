@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { DemoBanner } from "@/components/layout/DemoBanner";
 import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
+import { Logomark } from "@/components/layout/Logomark";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -52,7 +53,8 @@ export function AppShell(): React.JSX.Element {
   return (
     <div className="flex h-screen bg-background text-foreground">
       <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-card/40">
-        <div className="p-4">
+        <div className="flex items-center gap-2 p-4">
+          <Logomark className="h-5 w-5" />
           <span className="text-lg font-semibold tracking-tight">
             Hind<span className="text-accent">sight</span>
           </span>
@@ -92,7 +94,7 @@ export function AppShell(): React.JSX.Element {
                 cn(
                   "block rounded-md border-l-2 px-3 py-2 text-sm transition-colors hover:bg-muted hover:text-foreground",
                   isActive
-                    ? "border-accent bg-muted font-medium text-foreground"
+                    ? "border-accent bg-muted font-medium text-foreground shadow-[inset_0_0_20px_-14px_var(--color-accent)]"
                     : "border-transparent text-muted-foreground"
                 )
               }
