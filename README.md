@@ -86,7 +86,8 @@ split. The short version: this service graph is small enough (hundreds of nodes,
 thousands of edges) that a recursive CTE outperforms a dedicated graph database on
 both latency and operational cost, and a postmortem's text, embeddings, and
 service-links commit in one transaction instead of three. Full reasoning, including
-the actual scale at which that trade would flip, is in `docs/architecture.md`.
+the actual scale at which that trade would flip, is in `docs/architecture.md`; the
+real schema behind it is in `docs/data-model.md`.
 
 ## The agent pipeline
 
