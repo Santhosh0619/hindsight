@@ -467,7 +467,7 @@ structured events.
 Full detail on both findings and the design rationale behind the queue's reclaim/
 backoff semantics: ADR 0005.
 
-## Phase 6 — Extraction Agents (Pydantic AI) — done, PR open
+## Phase 6 — Extraction Agents (Pydantic AI) — merged ([PR #7](https://github.com/Santhosh0619/hindsight/pull/7))
 
 Target checkpoint (Master-Prompt.md): ingest 3 postmortems; `postmortem_facts`,
 `postmortem_services`, and `postmortem_failure_modes` are populated; a deliberately
@@ -547,7 +547,7 @@ cleanly with `"All LLM providers unavailable"` and dead-lettered after retrying.
 
 Full detail on all findings and design rationale: ADR 0006.
 
-## Phase 7 — Hybrid Retrieval — done, PR open ([PR #8](https://github.com/Santhosh0619/hindsight/pull/8))
+## Phase 7 — Hybrid Retrieval — merged ([PR #8](https://github.com/Santhosh0619/hindsight/pull/8))
 
 Target checkpoint (Master-Prompt.md): query the same corpus in `vector`/`keyword`/
 `graph`/`hybrid` mode and get visibly different, correctly-attributed result sets;
@@ -647,7 +647,7 @@ cross-workspace isolation, and the unauthenticated redirect.
 
 Full detail on all findings and design rationale: ADR 0007.
 
-## Phase 8 — LangGraph Agent Pipeline — done, PR open ([PR #9](https://github.com/Santhosh0619/hindsight/pull/9))
+## Phase 8 — LangGraph Agent Pipeline — merged ([PR #9](https://github.com/Santhosh0619/hindsight/pull/9))
 
 Target checkpoint (Master-Prompt.md): feed a seeded alert through the compiled graph in
 a script; all six nodes fire in order; force a low score and observe exactly one
@@ -746,7 +746,7 @@ against a real graph run, which is what caught this phase's one genuine concurre
 
 Full detail on all findings and design rationale: ADR 0008.
 
-## Phase 9 — Incidents API + The Money Screen — done, PR open ([PR #10](https://github.com/Santhosh0619/hindsight/pull/10))
+## Phase 9 — Incidents API + The Money Screen — merged ([PR #10](https://github.com/Santhosh0619/hindsight/pull/10))
 
 Target checkpoint (Master-Prompt.md): file an incident, watch the agent pipeline
 investigate it live, land on a brief with hypotheses, citations, matched postmortems,
@@ -852,7 +852,7 @@ written, which is what actually surfaced this phase's CRLF SSE-framing bug (belo
 
 Full detail on all findings and design rationale: ADR 0009.
 
-## Phase 10 — Service Map, Knowledge Base, Dashboard — done, PR open ([PR #11](https://github.com/Santhosh0619/hindsight/pull/11))
+## Phase 10 — Service Map, Knowledge Base, Dashboard — merged ([PR #11](https://github.com/Santhosh0619/hindsight/pull/11))
 
 Target checkpoint (Master-Prompt.md): all three screens work against seeded data and
 are usable on a laptop screen without horizontal scrolling.
@@ -1296,7 +1296,7 @@ have caught either, since every one of those seven parametrized cases *passed* �
 for the wrong reason. Neither gate is a substitute for the other; this phase is the
 clearest example so far in this project of why both stay in the workflow.
 
-## Phase 15 — Tests — done, PR open ([PR #19](https://github.com/Santhosh0619/hindsight/pull/19))
+## Phase 15 — Tests — merged ([PR #19](https://github.com/Santhosh0619/hindsight/pull/19))
 
 Backend-only cross-cutting pass, no new F<X> screen. An audit found most of Master-
 Prompt.md's Phase 15 checklist already existed under this project's own per-module
@@ -1374,5 +1374,43 @@ Post-merge, triggered `keep-alive.yml` live via `workflow_dispatch` on `main` (t
 first point it could exist to be dispatched) — the real GitHub Actions run printed
 "HEALTH_CHECK_URL not set, nothing to ping yet." and exited 0, exactly matching the
 pre-merge local verification. Closes the loop ADR 0016 §2 opened.
-## Phase 17 — Documentation — pending
+## Phase 17 — Documentation — done, PR open ([PR #22](https://github.com/Santhosh0619/hindsight/pull/22))
+
+Text-only pass — no application code changed. Two scope conflicts between
+Master-Prompt.md's Phase 17 spec and standing project decisions were resolved with
+the user before writing anything: no images/video (screenshots stay deferred to one
+session after Phase 18, as already decided), and no committed interview-prep file
+(the local, gitignored `docs/design-notes.md` already covers that privately — this
+phase folds the same substance into public docs as ordinary prose, no Q&A framing).
+
+`README.md` fully rewritten: problem, what it does, a real evaluation table from a
+fresh harness run (recall@1=0.700, recall@5=0.950, MRR=0.808, tied honestly across
+all three retrieval configurations), architecture, the agent pipeline, tech stack,
+quick start, and honest limitations. New `docs/architecture.md` and
+`docs/data-model.md` go deeper for a technical reader, grounded in the real code —
+the schema doc found two real, documented divergences from plan.md's original
+pre-implementation sketch (`agent_runs.brief_id`, `eval_runs.mode`). Added an MIT
+`LICENSE` file, since the README now references one. Also corrected six phases'
+(6, 7, 8, 9, 10, 15) stale "PR open" status in this file, discovered while cross-
+checking phase history for the roadmap section — none had been updated after their
+actual merges.
+
+Single combined review: 0 blocking, 0 warnings, 1 note (README didn't link
+`docs/data-model.md` directly) — fixed and re-confirmed. The reviewer independently
+re-ran the evaluation harness and re-checked the schema/index claims against source a
+second time rather than trusting the prose; both came back clean. Full writeup: ADR
+0017.
+
+| Step | Status | Notes |
+|---|---|---|
+| 1. BRANCH | done | `feat/documentation`, created from `main` after Phase 16 merged |
+| 2. READ | done | |
+| 3. EXPLORE | done | Two scope conflicts identified and resolved with the user before writing; gathered real numbers (fresh eval run, fixture counts, model files, config defaults) before drafting any doc |
+| 4. DOCUMENT | done | `docs/modules/phase-17-documentation/{PRD,FRD,NFR}.md` (`f7afc90`) |
+| 5. CODE | done | README rewrite, `docs/architecture.md`, `docs/data-model.md`, `LICENSE`, stale-status fixes (`133356e`) |
+| 6. TEST | done | Every number/command/schema claim independently verified against the running system or real source files before being written down (see FRD/NFR) |
+| 9. REVIEW | **1 NOTE → fixed** | Single combined pass, independently re-verified the evaluation numbers and schema claims rather than trusting the draft; 0 blocking, 0 warnings, 1 note (missing direct link to data-model.md), fixed and self-verified (`6a5d1b4`) |
+| 10. TEST-E2E | done | No app code changed this phase; existing suite re-run to confirm no regression: 29/29 |
+| 11. PUSH | pending | |
+| 12. PR | pending | |
 ## Phase 18 — Deploy & Final Verification — pending
