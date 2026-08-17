@@ -1410,7 +1410,7 @@ second time rather than trusting the prose; both came back clean. Full writeup: 
 | 5. CODE | done | README rewrite, `docs/architecture.md`, `docs/data-model.md`, `LICENSE`, stale-status fixes (`133356e`) |
 | 6. TEST | done | Every number/command/schema claim independently verified against the running system or real source files before being written down (see FRD/NFR) |
 | 9. REVIEW | **1 NOTE → fixed** | Single combined pass, independently re-verified the evaluation numbers and schema claims rather than trusting the draft; 0 blocking, 0 warnings, 1 note (missing direct link to data-model.md), fixed and self-verified (`6a5d1b4`) |
-| 10. TEST-E2E | pending | No app code changed this phase; existing suite re-run planned to confirm no regression |
+| 10. TEST-E2E | done | No app code changed this phase; existing suite re-run to confirm no regression: 29/29 |
 | 11. PUSH | pending | |
 | 12. PR | pending | |
 ## Phase 18 — Deploy & Final Verification — pending
