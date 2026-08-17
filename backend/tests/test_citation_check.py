@@ -8,7 +8,9 @@ from app.schemas.postmortem import PostmortemOut
 from app.schemas.search import ChunkExcerptOut, SearchResponseOut, SearchResultOut
 
 
-def _retrieval_with_one_chunk(chunk_id: uuid.UUID, content: str) -> SearchResponseOut:
+def _retrieval_with_one_chunk(
+    chunk_id: uuid.UUID, content: str
+) -> tuple[SearchResponseOut, uuid.UUID]:
     postmortem = PostmortemOut(
         id=uuid.uuid4(),
         external_ref=None,
@@ -21,7 +23,7 @@ def _retrieval_with_one_chunk(chunk_id: uuid.UUID, content: str) -> SearchRespon
         failure_reason=None,
         created_at=datetime.now(UTC),
     )
-    return SearchResponseOut(
+    retrieval = SearchResponseOut(
         mode="hybrid",
         timings_ms={},
         results=[
@@ -36,13 +38,16 @@ def _retrieval_with_one_chunk(chunk_id: uuid.UUID, content: str) -> SearchRespon
             )
         ],
     )
+    return retrieval, postmortem.id
 
 
 def test_a_citation_naming_a_chunk_id_outside_the_retrieval_set_always_fails() -> None:
     real_chunk_id = uuid.uuid4()
-    retrieval = _retrieval_with_one_chunk(
+    retrieval, _real_postmortem_id = _retrieval_with_one_chunk(
         real_chunk_id, "The database connection pool was exhausted during peak traffic."
     )
+    # This citation's chunk_id isn't in the retrieval at all, so there's nothing to
+    # correct it against -- postmortem_id passes through unchanged, same as before.
     fabricated_citation = Citation(chunk_id=uuid.uuid4(), postmortem_id=uuid.uuid4())
     draft = DraftBrief(
         hypotheses=[
@@ -64,9 +69,14 @@ def test_a_citation_naming_a_chunk_id_outside_the_retrieval_set_always_fails() -
 
 def test_a_citation_to_a_real_chunk_with_no_shared_terms_fails_plausibility() -> None:
     real_chunk_id = uuid.uuid4()
-    retrieval = _retrieval_with_one_chunk(
+    retrieval, real_postmortem_id = _retrieval_with_one_chunk(
         real_chunk_id, "The database connection pool was exhausted during peak traffic."
     )
+    # postmortem_id is deliberately wrong here too -- the analyst prompt never shows
+    # the model a postmortem's real id (see citation_check.py's own comment), so a
+    # citation this test constructs to look like model output should have the same
+    # kind of wrong id a real model produces, and the fix corrects it regardless of
+    # whether the citation ends up valid or invalid.
     unrelated_citation = Citation(chunk_id=real_chunk_id, postmortem_id=uuid.uuid4())
     draft = DraftBrief(
         hypotheses=[
@@ -83,14 +93,17 @@ def test_a_citation_to_a_real_chunk_with_no_shared_terms_fails_plausibility() ->
     cleaned, invalid = validate_citations(draft, retrieval)
 
     assert cleaned.hypotheses == []
-    assert invalid == [unrelated_citation]
+    assert invalid == [unrelated_citation.model_copy(update={"postmortem_id": real_postmortem_id})]
 
 
 def test_a_grounded_citation_survives() -> None:
     real_chunk_id = uuid.uuid4()
-    retrieval = _retrieval_with_one_chunk(
+    retrieval, real_postmortem_id = _retrieval_with_one_chunk(
         real_chunk_id, "The database connection pool was exhausted during peak traffic."
     )
+    # Same deliberately-wrong postmortem_id as the test above -- surviving a citation
+    # doesn't mean trusting its postmortem_id either; the corrected value should win
+    # even on the happy path.
     grounded_citation = Citation(chunk_id=real_chunk_id, postmortem_id=uuid.uuid4())
     draft = DraftBrief(
         hypotheses=[
@@ -107,13 +120,15 @@ def test_a_grounded_citation_survives() -> None:
     cleaned, invalid = validate_citations(draft, retrieval)
 
     assert len(cleaned.hypotheses) == 1
-    assert cleaned.hypotheses[0].citations == [grounded_citation]
+    assert cleaned.hypotheses[0].citations == [
+        grounded_citation.model_copy(update={"postmortem_id": real_postmortem_id})
+    ]
     assert invalid == []
 
 
 def test_an_invalid_runbook_step_citation_is_nulled_not_dropped() -> None:
     real_chunk_id = uuid.uuid4()
-    retrieval = _retrieval_with_one_chunk(
+    retrieval, _real_postmortem_id = _retrieval_with_one_chunk(
         real_chunk_id, "The database connection pool was exhausted during peak traffic."
     )
     bad_citation = Citation(chunk_id=uuid.uuid4(), postmortem_id=uuid.uuid4())

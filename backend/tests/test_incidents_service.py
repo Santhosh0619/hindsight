@@ -157,6 +157,82 @@ async def test_generate_brief_enriches_citations_with_real_chunk_content_and_pos
     assert matched[0].overall_score > 0
 
 
+async def test_a_wrong_postmortem_id_from_the_model_does_not_drop_the_citation(
+    client: AsyncClient, db: AsyncSession
+) -> None:
+    # The analyst prompt only ever shows the model a chunk's postmortem *title*
+    # (analyst_agent.py's <chunk postmortem="{title}">), never its id, so a citation's
+    # postmortem_id is a value the model can't reliably know -- real usage against a
+    # live free-tier model observed it defaulting to an all-zero placeholder UUID,
+    # which silently dropped every hypothesis whose citation resolution depended on it
+    # matching. The server derives the real postmortem_id from the chunk's own FK
+    # instead of trusting the model's; this proves that holds even when the model's
+    # value is wrong, not just when the earlier test happens to get it right.
+    owner = await signup(client)
+    token = owner["access_token"]
+    workspace_id = await _workspace_id(client, token)
+    await _create_service(client, token, workspace_id, "checkout-api")
+    postmortem_id = await _ingest(
+        client, db, token=token, workspace_id=workspace_id, raw_text=_PM_TEXT
+    )
+    chunk_id = await _one_chunk_id(db, postmortem_id)
+    incident = await _create_incident(
+        db, workspace_id=workspace_id, raw_text="checkout-api pool exhaustion errors"
+    )
+
+    def signal_args() -> dict[str, Any]:
+        return {
+            "symptoms": ["checkout errors"],
+            "error_strings": ["ORA-12520"],
+            "metrics": {},
+            "candidate_service_names": ["checkout-api"],
+            "time_window": None,
+            "severity_guess": "sev2",
+            "extraction_confidence": 0.9,
+        }
+
+    def draft_args() -> dict[str, Any]:
+        wrong_postmortem_id = "00000000-0000-0000-0000-000000000000"
+        citation = {"chunk_id": str(chunk_id), "postmortem_id": wrong_postmortem_id, "quote": None}
+        return {
+            "hypotheses": [
+                {
+                    "statement": "checkout-api failed due to connection pool exhaustion",
+                    "confidence": 0.8,
+                    "citations": [citation],
+                }
+            ],
+            "runbook_steps": [
+                {
+                    "step": "raise the connection pool size",
+                    "source_postmortem_id": None,
+                    "citation": citation,
+                }
+            ],
+            "citations": [citation],
+        }
+
+    def judgment_args() -> dict[str, Any]:
+        return {"score": 0.9, "is_grounded": True, "issues": [], "suggested_refinements": []}
+
+    model = _function_model(signal_fn=signal_args, draft_fn=draft_args, judgment_fn=judgment_args)
+    router = LLMRouter([FakeModelProvider(model)])
+    graph_store = PostgresGraphStore(db)
+
+    brief = await incidents_service.generate_brief(db, graph_store, router, incident=incident)
+
+    # The hypothesis and runbook step both survive -- neither got silently dropped
+    # because the model's postmortem_id didn't match anything real.
+    assert len(brief.hypotheses) == 1
+    citation = brief.hypotheses[0].citations[0]
+    assert citation.postmortem_id == postmortem_id
+    assert citation.postmortem_title == "checkout-api pool exhaustion"
+
+    assert len(brief.runbook_steps) == 1
+    assert brief.runbook_steps[0].citation is not None
+    assert brief.runbook_steps[0].citation.postmortem_id == postmortem_id
+
+
 async def test_a_low_critic_score_produces_a_visible_retry_in_the_stream(
     client: AsyncClient, db: AsyncSession
 ) -> None:
