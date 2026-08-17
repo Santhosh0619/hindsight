@@ -175,11 +175,12 @@ describe("BriefView", () => {
     expect(await screen.findByText("Thanks for the feedback.")).toBeInTheDocument();
   });
 
-  it("shows deterministic-only empty states when nothing was generated", () => {
+  it("shows deterministic-only empty states when the LLM wasn't used", () => {
     render(
       <BriefView
         brief={{
           ...BASE_BRIEF,
+          llm_used: false,
           hypotheses: [],
           matched_postmortems: [],
           blast_radius: { services: [] },
@@ -196,5 +197,20 @@ describe("BriefView", () => {
     expect(screen.getByText("No matches found in the corpus.")).toBeInTheDocument();
     expect(screen.getByText("No downstream impact computed.")).toBeInTheDocument();
     expect(screen.getByText("No runbook steps assembled.")).toBeInTheDocument();
+  });
+
+  it("doesn't blame the LLM for an empty hypotheses list when it actually ran", () => {
+    render(
+      <BriefView
+        brief={{ ...BASE_BRIEF, llm_used: true, hypotheses: [] }}
+        workspaceId="ws-1"
+        incidentId="incident-1"
+      />
+    );
+
+    expect(screen.getByText("No hypotheses were generated for this incident.")).toBeInTheDocument();
+    expect(
+      screen.queryByText("No hypotheses — this brief is deterministic-only.")
+    ).not.toBeInTheDocument();
   });
 });
