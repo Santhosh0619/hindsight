@@ -153,4 +153,41 @@ describe("AppShell — FR-07 role gating", () => {
 
     expect(screen.queryByText(/synthetic data, read-only/i)).not.toBeInTheDocument();
   });
+
+  it("highlights only New Incident, not Incidents, when viewing /incidents/new", () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: "4", email: "r@example.com", full_name: "Responder User", is_demo: false },
+      memberships: [
+        { workspace_id: "w1", workspace_name: "W", workspace_slug: "w", role: "responder" },
+      ],
+      currentMembership: {
+        workspace_id: "w1",
+        workspace_name: "W",
+        workspace_slug: "w",
+        role: "responder",
+      },
+      setCurrentWorkspace: vi.fn(),
+      logout: vi.fn(),
+    });
+    mockUseRequireRole.mockReturnValue(true);
+    mockUseCanGenerateBrief.mockReturnValue(true);
+    mockUseIsDemoWorkspace.mockReturnValue(false);
+
+    render(
+      <MemoryRouter initialEntries={["/incidents/new"]}>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="/incidents/new" element={<div>New Incident content</div>} />
+            <Route path="/incidents" element={<div>Incidents content</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("link", { name: "New Incident" })).toHaveAttribute(
+      "aria-current",
+      "page"
+    );
+    expect(screen.getByRole("link", { name: "Incidents" })).not.toHaveAttribute("aria-current");
+  });
 });
