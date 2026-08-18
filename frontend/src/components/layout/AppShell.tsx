@@ -90,6 +90,12 @@ export function AppShell(): React.JSX.Element {
             <NavLink
               key={screen.path}
               to={screen.path}
+              // Every sidebar destination is a flat, absolute route (routes.tsx has no
+              // real parent/child nesting between them) -- without `end`, NavLink's
+              // default prefix matching means a path like /incidents/new also matches
+              // /incidents, double-highlighting both "New Incident" and "Incidents" at
+              // once.
+              end
               className={({ isActive }) =>
                 cn(
                   "block rounded-md border-l-2 px-3 py-2 text-sm transition-colors hover:bg-muted hover:text-foreground",
